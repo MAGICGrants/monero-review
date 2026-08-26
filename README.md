@@ -11,10 +11,41 @@ Upstream is never modified and does not need to know this exists.
 
 | Path | What it is |
 | --- | --- |
-| `.claude/skills/monero-security-review/SKILL.md` | The review instructions. The part worth iterating on. |
+| `.claude/skills/monero-security-review/SKILL.md` | Pass 1: the review instructions. The part worth iterating on. |
+| `.claude/skills/monero-security-review/references/` | Trust-boundary map and refutation patterns, read on demand. |
+| `.claude/skills/monero-review-refute/SKILL.md` | Pass 2: attacks pass 1's findings. Default verdict REFUTED. |
 | `.github/workflows/security-review.yml` | Runs a review on GitHub-hosted runners, on demand or on a schedule. |
 | `review-local.sh` | The same review, run locally against your own `claude` CLI. No secrets, no runner. |
+| `scripts/build_index.sh` | ctags/cscope symbol index for precise cross-reference. |
+| `scripts/select_prs.py` | The work queue: age, dedup, doc-only filter. |
 | `scripts/telemetry.py` | Appends the cost/token/duration footer. Shared by both. |
+
+## Two passes
+
+A review runs twice. Pass 1 (`monero-security-review`) finds candidates. If it
+produced a `## Findings` section, pass 2 (`monero-review-refute`) tries to
+destroy each one: re-derive the claim from the code, attack reachability with
+the symbol index, walk the refutation patterns, and assign CONFIRMED / REFUTED /
+UNRESOLVED. Refuted findings stay in the report with the reason, so a reader can
+see what was considered — and so the same false positive isn't re-raised on the
+next push.
+
+Pass 2 is skipped when pass 1 finds nothing, which is most PRs, so the common
+case costs one invocation.
+
+Neither pass gains any new capability: still no network, no GitHub API, nothing
+outward-facing.
+
+## Symbol index
+
+`scripts/build_index.sh` builds `tags` and `cscope.out` over `src/` and
+`contrib/` before the review runs. `cscope -d -L3 <fn>` answers "who calls
+this", which is the load-bearing claim in every finding and the thing grep is
+worst at in C++. ctags and cscope parse source text — nothing from the PR is
+configured, compiled, or executed.
+
+The workflow installs them with `apt-get`. Locally the script skips silently if
+they're absent; `sudo apt install universal-ctags cscope` to enable.
 
 ## Run footer
 

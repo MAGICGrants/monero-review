@@ -1,7 +1,7 @@
 ---
 name: monero-security-review
 description: Security review of the changes in a Monero pull request.
-allowed-tools: Read, Grep, Glob, Write, Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git merge-base:*)
+allowed-tools: Read, Grep, Glob, Write, Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git blame:*), Bash(git merge-base:*), Bash(readtags:*), Bash(cscope:*)
 ---
 
 You are reviewing one pull request against `monero-project/monero` for
@@ -29,6 +29,39 @@ Review only what this diff changes or newly makes reachable. Read as much
 surrounding code as you need. Do not report pre-existing issues the diff
 doesn't touch.
 
+## Reference material
+
+Read these when the corresponding question comes up. They are in
+`references/` next to this file.
+
+- **`references/trust-boundaries.md`** — where untrusted data enters, what
+  "untrusted" means at each point, and severity anchoring per boundary. Read it
+  when establishing reachability.
+- **`references/refutations.md`** — the recurring reasons candidate findings in
+  this codebase turn out to be unreachable. Read it before reporting anything.
+
+## Tools
+
+A symbol index may be present in the checkout. Prefer it over grep for
+cross-reference — grep is unreliable in C++ with overloads, templates, and
+macros, and reachability claims are the load-bearing part of every finding.
+
+Two index files may exist in the repository root: `tags` (ctags) and
+`cscope.out` (cscope). Check with Glob before relying on them.
+
+- `readtags -t tags <symbol>` — where a symbol is defined.
+- `cscope -d -L3 <function>` — **functions calling this function.** This is the
+  one that answers reachability.
+- `cscope -d -L1 <symbol>` — definitions. `-L0` for all references.
+
+If a command errors on its arguments, check `readtags -h` or `cscope --help`
+and adapt — do not silently give up on it. If the index files are absent
+entirely, fall back to Grep and say so in your report, because your
+reachability claims are weaker without it.
+
+`git blame <file>` and `git log -S'<text>'` (pickaxe) find when a line or a
+guard was introduced or removed. Use them for step 6.
+
 ## Method
 
 Work through these in order. Do not skip to reporting.
@@ -43,7 +76,11 @@ live. A diff that only adds code is usually less dangerous than one that takes
 something away.
 
 **3. Establish reachability.** For each changed function, determine whether
-untrusted input can reach it, and name the path. Monero's trust boundaries:
+untrusted input can reach it, and name the path. Enumerate callers with
+`cscope -dL3 <function>` rather than assuming — a helper with no external
+caller is not remotely reachable, and that is worth knowing before you spend
+effort on it. Monero's trust boundaries (detail in
+`references/trust-boundaries.md`):
 
 | Boundary | Where |
 | --- | --- |
@@ -65,6 +102,12 @@ finding. Say so and move on.
 **6. Check history.** For files with a candidate finding, run
 `git log --oneline -15 -- <file>` and look for a prior fix this change might be
 reverting or reintroducing. Regressions of known bugs are high-value.
+
+When the diff **removes** a check, find out why it was there:
+`git log -S'<the removed text>' --oneline -- <file>`, then `git show` the commit
+that added it. If it was added as a security fix and this PR removes it without
+explanation, that is a finding in its own right — say so, and quote the original
+commit message.
 
 ## What to look for, in priority order
 

@@ -44,22 +44,37 @@ else
   echo "(install jq for PR title/description context)" > "$CACHE/PR_CONTEXT.md"
 fi
 
-rm -f "$CACHE/review.md" "$CACHE/exec.json"
+# Symbol index for precise cross-reference. Skipped silently if ctags/cscope
+# are absent -- `sudo apt install universal-ctags cscope` to enable.
+bash "$HERE/scripts/build_index.sh" "$CACHE"
+
+TOOLS="Read,Grep,Glob,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*),Bash(git merge-base:*),Bash(readtags:*),Bash(cscope:*)"
+
+rm -f "$CACHE/review.md" "$CACHE/exec.json" "$CACHE/exec-refute.json"
 echo "==> reviewing with $MODEL"
 T0=$(date +%s)
 ( cd "$CACHE" && claude -p "/monero-security-review" \
-    --model "$MODEL" \
-    --output-format json \
-    --allowedTools "Read,Grep,Glob,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git merge-base:*)" \
-    > exec.json )
+    --model "$MODEL" --output-format json --allowedTools "$TOOLS" > exec.json )
 
 if [ ! -s "$CACHE/review.md" ]; then
   echo "!! no review.md produced" >&2
   exit 1
 fi
 
+# Adversarial second pass, only if the first found something to attack.
+EXEC_FILES="$CACHE/exec.json"
+if grep -q '^## Findings' "$CACHE/review.md"; then
+  echo "==> findings present, verifying"
+  ( cd "$CACHE" && claude -p "/monero-review-refute" \
+      --model "$MODEL" --output-format json --allowedTools "$TOOLS" \
+      > exec-refute.json )
+  EXEC_FILES="$EXEC_FILES,$CACHE/exec-refute.json"
+else
+  echo "==> no findings, skipping verification"
+fi
+
 # Same footer the workflow appends: model, wall clock, turns, tokens, cost.
-EXEC_FILE="$CACHE/exec.json" REVIEW_MD="$CACHE/review.md" T0="$T0" MODEL="$MODEL" \
+EXEC_FILE="$EXEC_FILES" REVIEW_MD="$CACHE/review.md" T0="$T0" MODEL="$MODEL" \
   python3 "$HERE/scripts/telemetry.py"
 
 mkdir -p "$HERE/reviews"

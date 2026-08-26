@@ -8,7 +8,9 @@ nothing. It must never fail the job -- any error just means a shorter footer.
 
 Env:
   EXEC_FILE   path to the execution log (action output, or `claude
-              --output-format json` stdout). Optional.
+              --output-format json` stdout). Optional. Accepts a
+              comma-separated list -- the review and refutation passes are
+              separate invocations and their metrics are summed.
   REVIEW_MD   review file to append to. Default: review.md
   T0          unix timestamp taken before the review started. Optional.
   MODEL       model name to display. Optional.
@@ -65,6 +67,23 @@ def load(path):
         return events or None
 
 
+def merge(results):
+    """Sum metrics across passes (review, then refutation)."""
+    if len(results) == 1:
+        return results[0]
+    total = {"usage": {}, "passes": len(results)}
+    for key in ("duration_ms", "num_turns", "total_cost_usd"):
+        vals = [r.get(key) for r in results if isinstance(r.get(key), (int, float))]
+        if vals:
+            total[key] = sum(vals)
+    for key in USAGE_KEYS:
+        vals = [(r.get("usage") or {}).get(key) for r in results]
+        vals = [v for v in vals if isinstance(v, (int, float))]
+        if vals:
+            total["usage"][key] = sum(vals)
+    return total
+
+
 def human(n):
     if n >= 1_000_000:
         return f"{n / 1_000_000:.2f}M"
@@ -99,14 +118,21 @@ def main():
         except ValueError:
             pass
 
-    exec_file = os.environ.get("EXEC_FILE")
-    result = None
-    if exec_file and os.path.exists(exec_file):
+    paths = [p.strip() for p in os.environ.get("EXEC_FILE", "").split(",")
+             if p.strip()]
+    results = []
+    for path in paths:
+        if not os.path.exists(path):
+            continue
         try:
-            result = find_result(load(exec_file))
+            found = find_result(load(path))
         except Exception as exc:                      # noqa: BLE001
-            print(f"telemetry: could not parse {exec_file}: {exc}",
-                  file=sys.stderr)
+            print(f"telemetry: could not parse {path}: {exc}", file=sys.stderr)
+            continue
+        if found:
+            results.append(found)
+
+    result = merge(results) if results else None
 
     if result:
         ms = result.get("duration_ms")
@@ -115,7 +141,8 @@ def main():
 
         turns = result.get("num_turns")
         if isinstance(turns, int):
-            bits.append(f"{turns} turns")
+            passes = result.get("passes")
+            bits.append(f"{turns} turns" + (f" over {passes} passes" if passes else ""))
 
         usage = result.get("usage") or {}
         if isinstance(usage, dict) and any(k in usage for k in USAGE_KEYS):
@@ -134,7 +161,7 @@ def main():
             # Runs bill against a Claude subscription, not the API. This is the
             # API-rate equivalent -- useful for comparing PRs, not a charge.
             bits.append(f"~${cost:.2f} at API rates")
-    elif exec_file:
+    elif paths:
         bits.append("token stats unavailable")
 
     run_url = os.environ.get("RUN_URL")

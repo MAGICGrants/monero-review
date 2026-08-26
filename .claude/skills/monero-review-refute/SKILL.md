@@ -1,0 +1,98 @@
+---
+name: monero-review-refute
+description: Adversarially verify the findings in an existing Monero PR review.
+allowed-tools: Read, Grep, Glob, Write, Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git blame:*), Bash(git merge-base:*), Bash(readtags:*), Bash(cscope:*)
+---
+
+A first-pass security review of this pull request has already been written to
+`review.md`. Your job is **not** to review the PR again. Your job is to try to
+destroy every finding in that file.
+
+Assume the first pass was overconfident, because first passes are. In prior
+audit work on this codebase, roughly four out of five candidate findings did not
+survive verification. Your default verdict is REFUTED; a finding has to earn
+CONFIRMED.
+
+## What you have
+
+- `review.md` — the findings to attack.
+- The PR diff: `git diff $(git merge-base origin/master HEAD)...HEAD`
+- `PR_CONTEXT.md` — the PR title and description, if present.
+- `references/refutations.md` and `references/trust-boundaries.md` in the
+  `monero-security-review` skill directory — the recurring reasons findings in
+  this codebase turn out to be unreachable. Read `refutations.md` before you
+  start.
+- A symbol index, if `tags` and `cscope.out` exist in the repository root:
+  `cscope -d -L3 <fn>` for callers, `readtags -t tags <sym>` for definitions
+  (check `cscope --help` if the arguments are rejected). Use it — imprecise
+  caller analysis is the single most common source of a bogus reachability
+  claim, and re-deriving callers from the index is the fastest way to kill one.
+
+## Method, per finding
+
+Take each finding one at a time and independently. Do not let a strong finding
+lend credibility to a weak one.
+
+**1. Re-derive the claim from the code.** Open the cited file and line. Does the
+code say what the finding says it says? Misread control flow is the most common
+first-pass error. If the citation is wrong, that alone is REFUTED.
+
+**2. Attack reachability.** The finding names an entry point and a call
+sequence. Verify every link with `cscope -dL3`, not by assumption. Ask: is the
+function actually called from the claimed boundary? Is there a caller that
+already validates the precondition? Is the whole path behind a config option,
+and what is its default?
+
+**3. Attack the primitive.** Even if reachable, does the bug do what is claimed?
+Check the real types for overflow claims. Check whether the container is
+actually mutated during iteration. Check whether the freed object is actually
+reachable afterward.
+
+**4. Look for the guard.** Walk `references/refutations.md` and check every
+pattern that could apply — serializer bounds, proof-dimension validation,
+`CHECK_AND_ASSERT_*` macros two frames up, library-level limits, restricted-RPC
+gating. Read the serializer. Read the caller. Do not accept the first pass's
+word that no guard exists.
+
+**5. Decide.**
+
+- **CONFIRMED** — you tried the above and it survived. State what you checked
+  that would have killed it and why it did not.
+- **REFUTED** — you found the reason it does not hold. State the reason
+  concretely, with the file and line of the guard.
+- **UNRESOLVED** — you could not settle it within the effort available. Say
+  precisely which link is unverified and what would settle it. Use this
+  sparingly; it is not a way to avoid deciding.
+
+Severity may also be wrong in a direction other than down. If a finding is real
+but the first pass understated it — a wallet-side memory corruption filed as
+MEDIUM when keys are in the process — correct it upward and say so.
+
+## Output
+
+Rewrite `review.md` in place. Keep the original summary and "What was checked"
+sections, then present:
+
+```markdown
+## Findings
+
+### [SEVERITY / CONFIRMED] Short title
+(the original finding, corrected where the first pass got details wrong)
+- **Verification:** what you did to attack it and why it survived.
+
+## Refuted during verification
+
+### ~~Short title~~ — REFUTED
+- **Original claim:** one line.
+- **Why it fails:** the guard, with `file:line`.
+```
+
+Keep refuted findings in the file rather than deleting them. A reader needs to
+see what was considered and dismissed — that is what makes the surviving
+findings credible, and it stops the same false positive being re-raised on the
+next push.
+
+If every finding is refuted, say so plainly at the top of the summary: the PR
+had no confirmed security findings, and here is what was considered.
+
+Write only `review.md`. Create no other files.
