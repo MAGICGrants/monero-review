@@ -61,21 +61,66 @@ Locally, with no GitHub involvement at all:
 ./review-local.sh 9876
 ```
 
-## The daily sweep
+## The drip
 
-The `schedule:` block in the workflow is commented out deliberately. Run a few
-reviews by hand first, see what they cost against your subscription limits, then
-enable it. As configured it reviews at most 4 non-draft PRs updated in the last
-72 hours, one at a time, on Sonnet. Manual dispatches default to Opus.
+The `schedule:` block is commented out deliberately. Run a few reviews by hand
+first, see what they cost, then enable it.
+
+It is a **work queue polled every 30 minutes, one PR per tick** — not a daily
+batch. That shape is deliberate: Claude subscription limits are rolling 5-hour
+windows, so four reviews fired at 6am can exhaust a window and leave you
+rate-limited in your own interactive sessions. Spread over the day, any given
+window carries roughly one review and keeps its headroom.
+
+Each tick makes two cheap API calls in the `select` job — open PRs upstream, and
+the issue titles in this repo — and starts a review runner only if something is
+actually unreviewed. Idle ticks cost nothing but Actions minutes.
 
 Deduplication is keyed on **head SHA**, not PR number. A PR sitting untouched is
-reviewed once; a PR that gets force-pushed three times is reviewed three times;
-a PR that collects twenty comments and no new commits is reviewed once. Cost
-tracks actual code churn. Because the SHA guard is the real dedup, the 72-hour
-lookback can be generous — over-selection costs nothing.
+reviewed once; a PR force-pushed three times is reviewed three times; a PR that
+collects twenty comments and no new commits is reviewed once. Cost tracks real
+code churn. A failed run deliberately files no issue, so it leaves no marker and
+is retried on the next tick rather than being silently blackholed.
 
-A failed run deliberately files no issue, so it leaves no dedup marker and gets
-retried on the next sweep rather than being silently blackholed.
+### Sizing the first drain
+
+The one-off cost is the initial backlog, not the steady state. Measured against
+upstream on 2026-08-26:
+
+| `MAX_AGE_DAYS` | PRs in the starting queue |
+| --- | --- |
+| 1 | 22 |
+| 2 | 33 |
+| 3 | 42 |
+| 7 | 65 |
+| 14 | 80 |
+
+At `*/30` that drains ~48/day, so even a 1-day window is ~22 reviews in the
+first half-day — enough to matter on a subscription. Ship as configured
+(`MAX_AGE_DAYS: 1`), and consider an hourly cron for the first day to halve the
+drain rate while you watch what it does to your limits.
+
+Steady state is much lighter, because dedup keys on head SHA: comments and label
+changes bump `updatedAt` but don't requeue a PR. Only actual pushes do. Once the
+backlog is gone, most ticks find nothing and the frequency is buying latency
+rather than volume — which is the entire point of polling often instead of
+batching daily.
+
+`BATCH: 1` is the other load-bearing setting. Raising it is what reintroduces
+the bursts this design exists to avoid.
+
+Workflow-level `concurrency` serialises everything, so overlapping ticks collapse
+into one pending run and two runs can never pick the same PR.
+
+### Kill switch
+
+```bash
+gh variable set REVIEW_PAUSED --body 1 --repo xmrack/monero-review    # stop
+gh variable set REVIEW_PAUSED --body 0 --repo xmrack/monero-review    # resume
+```
+
+Stops the scheduled drip without editing the cron. Manual dispatches still run,
+so you can review something urgent while the sweep is paused.
 
 ## Design notes
 

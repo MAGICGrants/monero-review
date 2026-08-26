@@ -17,49 +17,88 @@ on:
           - claude-opus-5
           - claude-sonnet-5
 
-  # Daily sweep. Left disabled on purpose: run a few reviews by hand first and
-  # see what they cost against your Claude subscription limits, then uncomment.
-  # Scheduled runs use Sonnet and are capped at MAX_SWEEP PRs.
+  # Frequent, low-volume drip. One PR per tick keeps any single rolling 5-hour
+  # Claude window carrying a small load instead of one daily burst that could
+  # exhaust it and block your interactive sessions. Most ticks find nothing to
+  # do and cost nothing. Left disabled until you have calibrated -- uncomment,
+  # and see "the drip" in the README before you do.
   # schedule:
-  #   - cron: "0 6 * * *"
+  #   - cron: "*/30 * * * *"
 
 env:
   UPSTREAM: monero-project/monero
-  LOOKBACK: "72 hours ago"
-  MAX_SWEEP: 4
+  # Only consider PRs touched this recently. Upstream is busier than it looks:
+  # measured 2026-08-26, the starting queue is ~22 PRs at 1 day, ~33 at 2,
+  # ~42 at 3. Start at 1 so the first drain is survivable, then widen.
+  MAX_AGE_DAYS: 1
+  # PRs reviewed per tick. Raising this is what reintroduces bursts.
+  BATCH: 1
+
+# One review at a time, repo-wide. Rapid ticks collapse into a single pending
+# run rather than stacking, and no two runs can pick the same PR concurrently.
+concurrency:
+  group: monero-review
+  cancel-in-progress: false
 
 permissions: {}
 
 jobs:
-  # Decide which upstream PRs this run covers. A manual dispatch with a number
-  # reviews exactly that PR; anything else sweeps recently-updated open PRs.
+  # The work queue. A manual dispatch with a number reviews exactly that PR.
+  # Otherwise this picks unreviewed PRs -- deduplication happens HERE, from two
+  # cheap API calls, so a tick with nothing to do never starts a review runner.
   select:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      issues: read
     outputs:
       prs: ${{ steps.pick.outputs.prs }}
     steps:
       - id: pick
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          WANT: ${{ inputs.pr || 'recent' }}
+          WANT: ${{ inputs.pr || 'sweep' }}
+          PAUSED: ${{ vars.REVIEW_PAUSED }}
         run: |
           set -euo pipefail
           if [[ "$WANT" =~ ^[0-9]+$ ]]; then
-            prs="[\"$WANT\"]"
-          else
-            since=$(date -u -d "$LOOKBACK" +%Y-%m-%dT%H:%M:%SZ)
-            prs=$(gh pr list --repo "$UPSTREAM" --state open --limit 100 \
-                    --json number,updatedAt,isDraft \
-                    --jq "[.[]
-                           | select(.isDraft | not)
-                           | select(.updatedAt > \"$since\")
-                           | .number | tostring][:$MAX_SWEEP]" \
-                  | tr -d '\n ')
+            echo "prs=[\"$WANT\"]" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
-          echo "selected: $prs"
-          echo "prs=$prs" >> "$GITHUB_OUTPUT"
+          # Kill switch: `gh variable set REVIEW_PAUSED --body 1` stops the drip
+          # without editing the cron. Manual dispatches still work.
+          if [ "${PAUSED:-}" = "1" ] && [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
+            echo "sweep paused via REVIEW_PAUSED"
+            echo "prs=[]" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          gh pr list --repo "$UPSTREAM" --state open --limit 300 \
+            --json number,updatedAt,isDraft,headRefOid > prs.json
+          # Our own issue titles carry "#<pr> @ <sha12>", so they are the record
+          # of what has already been reviewed. One listing, strongly consistent.
+          gh issue list --repo "$GITHUB_REPOSITORY" --state all --limit 1000 \
+            --json title --jq '.[].title' > reviewed.txt || : > reviewed.txt
+
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import datetime, json, os
+
+          cutoff = (datetime.datetime.now(datetime.timezone.utc)
+                    - datetime.timedelta(days=int(os.environ["MAX_AGE_DAYS"]))
+                    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+          reviewed = open("reviewed.txt").read()
+
+          queue = [p for p in json.load(open("prs.json"))
+                   if not p["isDraft"]
+                   and p["updatedAt"] > cutoff
+                   and p["headRefOid"][:12] not in reviewed]
+          # Most recently active first: fresh work is worth more than backlog.
+          queue.sort(key=lambda p: p["updatedAt"], reverse=True)
+
+          picked = [str(p["number"]) for p in queue[:int(os.environ["BATCH"])]]
+          print(f"{len(queue)} unreviewed in window, taking {picked}", file=__import__("sys").stderr)
+          print("prs=" + json.dumps(picked))
+          PY
 
   review:
     needs: select
@@ -87,7 +126,9 @@ jobs:
           git fetch --filter=blob:none origin \
             "+refs/pull/${{ matrix.pr }}/head:refs/heads/pr"
           git checkout --quiet pr
-          echo "HEAD_SHA=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+          # Fixed 12 chars, not --short: `select` compares against this prefix
+          # and git's abbreviation length is not stable across repo states.
+          echo "HEAD_SHA=$(git rev-parse HEAD | cut -c1-12)" >> "$GITHUB_ENV"
 
       - name: Fetch PR description
         env:
@@ -104,29 +145,10 @@ jobs:
           persist-credentials: false
       - run: cp -r .harness/.claude .claude
 
-      # Only on the scheduled sweep: skip a PR whose current head SHA already
-      # has a review issue. Filtering by label uses the REST list endpoint,
-      # which is strongly consistent -- unlike the search API, which lags.
-      # A manual dispatch always reviews, because you asked for it explicitly.
-      - name: Skip if this head SHA was already reviewed
-        id: guard
-        if: github.event_name == 'schedule'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          titles=$(gh issue list --repo "$GITHUB_REPOSITORY" --state all \
-                     --label "pr-${{ matrix.pr }}" --limit 100 \
-                     --json title --jq '.[].title' 2>/dev/null || true)
-          if grep -qF "@ $HEAD_SHA" <<<"$titles"; then
-            echo "already reviewed at $HEAD_SHA, skipping"
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          fi
-
       # No GitHub tools, no network: Claude reads the diff and writes review.md.
       # The workflow, not the model, decides what happens to that file. The code
       # under review is written by strangers, so it gets no outward capability.
       - uses: anthropics/claude-code-action@v1
-        if: steps.guard.outputs.skip != 'true'
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: "/monero-security-review"
@@ -138,7 +160,7 @@ jobs:
       # An issue is the dedup marker, so it is only written on success --
       # a rate-limited or timed-out run leaves no marker and gets retried.
       - name: Publish findings
-        if: always() && steps.guard.outputs.skip != 'true'
+        if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -160,7 +182,7 @@ jobs:
             --body-file review.md --label "pr-${{ matrix.pr }}"
 
       - uses: actions/upload-artifact@v4
-        if: always() && steps.guard.outputs.skip != 'true'
+        if: always()
         with:
           name: review-${{ matrix.pr }}
           path: review.md
