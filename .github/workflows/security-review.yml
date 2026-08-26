@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       pr:
-        description: "Upstream PR number, or 'recent' for anything updated in the last 72h"
+        description: "Upstream PR number, or 'sweep' to take the next MAX_AGE_DAYS/BATCH from the queue"
         required: true
-        default: recent
+        default: sweep
         type: string
       model:
         description: "Model"
