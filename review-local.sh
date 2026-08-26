@@ -25,6 +25,10 @@ if [ ! -d "$CACHE/.git" ]; then
 fi
 
 echo "==> fetching PR $PR"
+# Detach HEAD first: git refuses to fetch into whatever branch is currently
+# checked out, and a prior run of this same PR (or a same-named branch left
+# over from anything else) leaves that branch checked out.
+git -C "$CACHE" checkout --quiet --detach
 git -C "$CACHE" fetch --filter=blob:none --quiet origin \
   "+refs/heads/master:refs/remotes/origin/master" \
   "+refs/pull/$PR/head:refs/heads/pr-$PR"
