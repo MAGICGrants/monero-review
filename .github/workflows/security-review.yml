@@ -1,0 +1,167 @@
+name: Monero Security Review
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "Upstream PR number, or 'recent' for anything updated in the last 72h"
+        required: true
+        default: recent
+        type: string
+      model:
+        description: "Model"
+        required: false
+        default: claude-opus-5
+        type: choice
+        options:
+          - claude-opus-5
+          - claude-sonnet-5
+
+  # Daily sweep. Left disabled on purpose: run a few reviews by hand first and
+  # see what they cost against your Claude subscription limits, then uncomment.
+  # Scheduled runs use Sonnet and are capped at MAX_SWEEP PRs.
+  # schedule:
+  #   - cron: "0 6 * * *"
+
+env:
+  UPSTREAM: monero-project/monero
+  LOOKBACK: "72 hours ago"
+  MAX_SWEEP: 4
+
+permissions: {}
+
+jobs:
+  # Decide which upstream PRs this run covers. A manual dispatch with a number
+  # reviews exactly that PR; anything else sweeps recently-updated open PRs.
+  select:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      prs: ${{ steps.pick.outputs.prs }}
+    steps:
+      - id: pick
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WANT: ${{ inputs.pr || 'recent' }}
+        run: |
+          set -euo pipefail
+          if [[ "$WANT" =~ ^[0-9]+$ ]]; then
+            prs="[\"$WANT\"]"
+          else
+            since=$(date -u -d "$LOOKBACK" +%Y-%m-%dT%H:%M:%SZ)
+            prs=$(gh pr list --repo "$UPSTREAM" --state open --limit 100 \
+                    --json number,updatedAt,isDraft \
+                    --jq "[.[]
+                           | select(.isDraft | not)
+                           | select(.updatedAt > \"$since\")
+                           | .number | tostring][:$MAX_SWEEP]" \
+                  | tr -d '\n ')
+          fi
+          echo "selected: $prs"
+          echo "prs=$prs" >> "$GITHUB_OUTPUT"
+
+  review:
+    needs: select
+    if: needs.select.outputs.prs != '' && needs.select.outputs.prs != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        pr: ${{ fromJSON(needs.select.outputs.prs) }}
+    steps:
+      # Every PR in a public repo exposes its head at refs/pull/N/head, so no
+      # mirror is needed. Blobless partial clone keeps this fast on a ~208MB
+      # repo while retaining the history that merge-base needs.
+      - name: Fetch upstream PR ${{ matrix.pr }}
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none --no-tags --single-branch --branch master \
+            "https://github.com/$UPSTREAM.git" .
+          git fetch --filter=blob:none origin \
+            "+refs/pull/${{ matrix.pr }}/head:refs/heads/pr"
+          git checkout --quiet pr
+          echo "HEAD_SHA=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+
+      - name: Fetch PR description
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api "repos/$UPSTREAM/pulls/${{ matrix.pr }}" \
+            --jq '"# \(.title)\n\n\(.body // "(no description)")"' > PR_CONTEXT.md
+
+      # The skill lives in this repo, not in Monero. Graft it onto the checkout.
+      - name: Add the review skill
+        uses: actions/checkout@v6
+        with:
+          path: .harness
+          persist-credentials: false
+      - run: cp -r .harness/.claude .claude
+
+      # Only on the scheduled sweep: skip a PR whose current head SHA already
+      # has a review issue. Filtering by label uses the REST list endpoint,
+      # which is strongly consistent -- unlike the search API, which lags.
+      # A manual dispatch always reviews, because you asked for it explicitly.
+      - name: Skip if this head SHA was already reviewed
+        id: guard
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          titles=$(gh issue list --repo "$GITHUB_REPOSITORY" --state all \
+                     --label "pr-${{ matrix.pr }}" --limit 100 \
+                     --json title --jq '.[].title' 2>/dev/null || true)
+          if grep -qF "@ $HEAD_SHA" <<<"$titles"; then
+            echo "already reviewed at $HEAD_SHA, skipping"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # No GitHub tools, no network: Claude reads the diff and writes review.md.
+      # The workflow, not the model, decides what happens to that file. The code
+      # under review is written by strangers, so it gets no outward capability.
+      - uses: anthropics/claude-code-action@v1
+        if: steps.guard.outputs.skip != 'true'
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: "/monero-security-review"
+          claude_args: |
+            --model ${{ inputs.model || 'claude-sonnet-5' }}
+            --max-turns 60
+            --allowedTools "Read,Grep,Glob,Write,Bash(git diff:*),Bash(git log:*),Bash(git merge-base:*)"
+
+      # An issue is the dedup marker, so it is only written on success --
+      # a rate-limited or timed-out run leaves no marker and gets retried.
+      - name: Publish findings
+        if: always() && steps.guard.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ ! -s review.md ]; then
+            echo "No review produced for $UPSTREAM#${{ matrix.pr }} @ \`$HEAD_SHA\` -- see logs." \
+              >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "## $UPSTREAM#${{ matrix.pr }} @ \`$HEAD_SHA\`"
+            echo "[Upstream PR](https://github.com/$UPSTREAM/pull/${{ matrix.pr }})"
+            echo
+            cat review.md
+          } >> "$GITHUB_STEP_SUMMARY"
+          gh label create "pr-${{ matrix.pr }}" --force >/dev/null 2>&1 || true
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "Review: $UPSTREAM#${{ matrix.pr }} @ $HEAD_SHA" \
+            --body-file review.md --label "pr-${{ matrix.pr }}"
+
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.guard.outputs.skip != 'true'
+        with:
+          name: review-${{ matrix.pr }}
+          path: review.md
+          if-no-files-found: ignore
