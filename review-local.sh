@@ -44,16 +44,23 @@ else
   echo "(install jq for PR title/description context)" > "$CACHE/PR_CONTEXT.md"
 fi
 
-rm -f "$CACHE/review.md"
+rm -f "$CACHE/review.md" "$CACHE/exec.json"
 echo "==> reviewing with $MODEL"
+T0=$(date +%s)
 ( cd "$CACHE" && claude -p "/monero-security-review" \
     --model "$MODEL" \
-    --allowedTools "Read,Grep,Glob,Write,Bash(git diff:*),Bash(git log:*),Bash(git merge-base:*)" )
+    --output-format json \
+    --allowedTools "Read,Grep,Glob,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git merge-base:*)" \
+    > exec.json )
 
 if [ ! -s "$CACHE/review.md" ]; then
   echo "!! no review.md produced" >&2
   exit 1
 fi
+
+# Same footer the workflow appends: model, wall clock, turns, tokens, cost.
+EXEC_FILE="$CACHE/exec.json" REVIEW_MD="$CACHE/review.md" T0="$T0" MODEL="$MODEL" \
+  python3 "$HERE/scripts/telemetry.py"
 
 mkdir -p "$HERE/reviews"
 OUT="$HERE/reviews/pr-$PR-$SHA.md"

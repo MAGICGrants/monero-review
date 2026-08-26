@@ -1,65 +1,180 @@
 ---
 name: monero-security-review
 description: Security review of the changes in a Monero pull request.
-allowed-tools: Read, Grep, Glob, Write, Bash(git diff:*), Bash(git log:*), Bash(git merge-base:*)
+allowed-tools: Read, Grep, Glob, Write, Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git merge-base:*)
 ---
 
-Review only the changes introduced by this pull request:
+You are reviewing one pull request against `monero-project/monero` for
+exploitable security defects. Monero is consensus-critical financial software
+handling other people's money and privacy: a bug here can split the chain,
+steal funds, or deanonymise users.
+
+Your output is read by a security engineer who will personally verify anything
+you report and take real findings upstream. A false positive costs them an hour
+of refutation work. An inflated report is worse than an empty one.
+
+## Scope
 
 ```
 git diff $(git merge-base origin/master HEAD)...HEAD
 ```
 
-Read `PR_CONTEXT.md` first if it exists — it holds the PR title and description.
-Stated intent matters: "does this change do what it claims, and what else does it
-do" is a sharper question than reading the diff cold.
+Read `PR_CONTEXT.md` first — the PR title and description. Stated intent is
+leverage: "does this do what it claims, and what *else* does it do" is a much
+sharper question than reading the diff cold. A change described as a pure
+refactor that alters a bounds check is far more interesting than one that
+announces it.
 
-Read surrounding code freely for context. Do not report pre-existing issues that
-the diff does not touch or make reachable.
+Review only what this diff changes or newly makes reachable. Read as much
+surrounding code as you need. Do not report pre-existing issues the diff
+doesn't touch.
 
-## Priorities, in order
+## Method
 
-1. **Consensus divergence.** Anything that could cause this node to accept or
-   reject a block or transaction differently from the rest of the network.
-   Changes to verification, serialization, hard-fork gating, or difficulty are
-   in scope even when they look like refactors.
+Work through these in order. Do not skip to reporting.
 
-2. **Memory safety on untrusted input.** Trace whether the changed code is
-   reachable from P2P blobs, RPC request bodies, wallet cache files, key-image
-   blobs, or daemon responses to a wallet. Look for `resize()`/`reserve()` sized
-   by an attacker-controlled count, unchecked indices, missing bounds checks,
-   iterator or reference invalidation across container mutation, and lifetime
-   bugs where an object outlives or is freed before its users.
+**1. Characterise the change.** What files, what subsystems, how many lines.
+Note anything the description doesn't mention.
 
-3. **Cryptographic correctness.** Missing point or scalar validation, absent
-   torsion and identity checks, non-constant-time comparison on secret data,
-   RNG misuse, and any nonce or key-derivation reuse.
+**2. Look at what was REMOVED, not just added.** Deleted bounds checks,
+loosened comparisons, dropped `if` guards, widened types, removed `const`,
+weakened asserts, and error paths converted to warnings are where real bugs
+live. A diff that only adds code is usually less dangerous than one that takes
+something away.
 
-4. **Privacy.** Decoy selection, timing and traffic side channels, and
-   information exposed over restricted RPC.
+**3. Establish reachability.** For each changed function, determine whether
+untrusted input can reach it, and name the path. Monero's trust boundaries:
 
-5. **Concurrency.** Shared mutable state touched from the refresh, RPC, and
-   wallet threads without synchronisation.
+| Boundary | Where |
+| --- | --- |
+| P2P messages from any peer | `src/cryptonote_protocol/cryptonote_protocol_handler.inl` — `handle_notify_new_block`, `handle_notify_new_transactions`, `handle_notify_new_fluffy_block`, `handle_response_get_objects` |
+| Levin framing | `contrib/epee/include/net/levin_protocol_handler_async.h` |
+| Public/restricted RPC | `src/rpc/core_rpc_server.cpp` `on_*` handlers — check whether the handler is gated by `m_restricted` |
+| Wire deserialisation | `contrib/epee/include/serialization/`, `src/serialization/` — attacker-chosen counts driving `resize`/`reserve` |
+| Daemon → wallet responses | `src/wallet/wallet2.cpp` — `process_parsed_blocks`, `process_new_transaction`, `process_new_blockchain_entry` (the daemon is NOT trusted by the wallet) |
+| Wallet cache / key-image blobs | `wallet2.cpp` cache load, `import_key_images` |
+| Block/tx validation | `src/cryptonote_core/blockchain.cpp`, `tx_pool.cpp`, `src/ringct/` |
 
-6. **Resource exhaustion** reachable before authentication.
+If you cannot name the entry point and the call sequence, you do not have a
+finding. Say so and move on.
 
-## Reporting
+**4. Check the invariant classes below** against the reachable changes.
 
-For each finding give:
+**5. Refute every candidate** (mandatory — see below).
 
-- `file:line`
-- The concrete attacker-controlled path that reaches it. If you cannot name the
-  entry point and the sequence of calls, you do not have a finding.
-- Impact, stated as what an attacker gains.
-- A minimal fix.
+**6. Check history.** For files with a candidate finding, run
+`git log --oneline -15 -- <file>` and look for a prior fix this change might be
+reverting or reintroducing. Regressions of known bugs are high-value.
+
+## What to look for, in priority order
+
+**1. Consensus divergence.** Anything that could make this node accept or
+reject a block or transaction differently from the rest of the network. Verification
+logic, serialisation round-tripping, hard-fork gating (`hardforks/hardforks.cpp`,
+`HF_VERSION_*`), difficulty, fee rules, tx weight, and sort/tie-break ordering
+are all in scope *even when the change looks like a pure refactor*. Ask
+specifically: is new behaviour gated on the correct fork version, and does an
+old node reach the same verdict as a new one on the same input?
+
+**2. Memory safety on untrusted input.** Attacker-controlled counts driving
+`resize()`/`reserve()`/allocation; unchecked indices; missing bounds checks;
+iterator, reference, or pointer invalidation across container mutation;
+use-after-free and lifetime bugs where an object is freed while still
+referenced; integer overflow in size or offset arithmetic; and unbounded
+accumulation from a single message.
+
+**3. Cryptographic correctness.** Missing point-on-curve or scalar-range
+validation; absent torsion/identity checks; non-constant-time comparison or
+branching on secret data; RNG misuse; nonce or key-derivation reuse; and
+signature/proof verification that can be satisfied by a degenerate input.
+
+**4. Privacy.** Decoy selection and ring construction; timing and traffic side
+channels; information exposed over restricted RPC; anything that links outputs,
+addresses, or IPs.
+
+**5. Concurrency.** Shared mutable state reached from the refresh, RPC, P2P, and
+wallet threads without synchronisation; lock ordering; state assumed stable
+across a call that can yield.
+
+**6. Resource exhaustion** reachable before authentication, where the
+amplification factor is meaningful.
+
+## Refutation is mandatory
+
+Before reporting anything, try to kill it. For each candidate, actively search
+for the reason it is *not* exploitable, and say what you found:
+
+- Is the value already bounded by a caller, or by the serialiser? Read the
+  caller. Read the serialiser.
+- Is the dangerous path gated behind a config option, and what is its default?
+- Is there a check elsewhere in the call chain that makes this unreachable?
+- Is the type actually wide enough that the overflow can't occur?
+- Does an existing `CHECK_AND_ASSERT` / `THROW_WALLET_EXCEPTION_IF` already
+  cover it?
+
+Recurring refutations in this codebase, from prior audit work — check these
+before reporting the corresponding class:
+
+- Buffer-size and index bugs in RingCT/Bulletproofs+ verification are often
+  unreachable because the serialiser caps the proof dimensions before the
+  arithmetic runs.
+- `boost::regex` ReDoS leads are refuted by default: Boost throws on
+  complexity-limit exceeded and the caller catches it.
+- RPC issues gated to unrestricted (full-admin) clients are usually not
+  findings; confirm the handler's `m_restricted` status before claiming reach.
+
+Report only what survives an honest attempt to refute it. If nothing survives,
+that is a good outcome — say so and show the work.
+
+## Severity
+
+- **CRITICAL** — consensus split, remote code execution, or fund theft.
+- **HIGH** — remote crash/OOM of a node or wallet, key or seed disclosure, or
+  a privacy break that deanonymises a user.
+- **MEDIUM** — requires unusual configuration, a non-default option, or
+  significant attacker position; or a privacy leak of limited scope.
+- **LOW** — defence-in-depth, hardening, or a bug with no attacker-reachable
+  impact you could establish.
+
+## Confidence
+
+- **CONFIRMED** — you traced the path end to end, named the entry point, and
+  read every guard along the way.
+- **PLAUSIBLE** — the path is likely but one link is unverified. Say which link.
+
+Anything weaker than PLAUSIBLE does not get reported.
+
+## Output
+
+Write your findings to `review.md` in the repository root, as GitHub-flavored
+Markdown. Create no other files and write nothing else.
+
+Structure:
+
+```markdown
+# Security review — <PR title>
+
+## Summary
+One paragraph: what the PR does, which trust boundaries it touches, and your
+overall assessment.
+
+## Findings
+### [SEVERITY / CONFIDENCE] Short title
+- **Location:** `file.cpp:123`
+- **Reachable from:** the entry point and call sequence, concretely
+- **Impact:** what an attacker gains
+- **Refutation attempted:** what you checked that would have made this safe,
+  and why it doesn't
+- **Fix:** the minimal change
+
+## What was checked
+Brief: which subsystems, which guards you read, which candidates you refuted
+and why. This is what makes an empty report trustworthy.
+```
+
+If nothing meets the bar, omit the Findings section, say so plainly in the
+summary, and make "What was checked" carry the weight.
 
 Do not report style, naming, or performance without a denial-of-service
-argument. Do not report theoretical issues you cannot trace to an input.
-Prefer zero findings over speculation — a report full of maybes is worse than
-an empty one, because someone has to spend real time refuting each entry.
-
-When you are done, write your findings to `review.md` in the repository root as
-GitHub-flavored Markdown. Lead with a one-paragraph summary of what the PR does
-and your overall assessment, then the findings ordered most severe first. If
-nothing meets the bar, say so plainly and explain what you checked. Write
-nothing else and create no other files.
+argument. Do not pad. Do not report theoretical issues you cannot trace to an
+input. Prefer zero findings over speculation.
