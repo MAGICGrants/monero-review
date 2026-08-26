@@ -71,9 +71,14 @@ jobs:
             echo "prs=[\"$WANT\"]" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # Kill switch: `gh variable set REVIEW_PAUSED --body 1` stops the drip
-          # without editing the cron. Manual dispatches still work.
-          if [ "${PAUSED:-}" = "1" ] && [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
+          # Kill switch: `gh variable set REVIEW_PAUSED --body 1` stops sweeps.
+          # Deliberately not gated on event_name == schedule: an externally
+          # driven drip (a real crontab calling `gh workflow run -f pr=sweep`,
+          # because GitHub's scheduler is unreliable) arrives as a
+          # workflow_dispatch, and the brake has to work for it too. Reviewing
+          # one PR by number still works while paused -- that path already
+          # returned above.
+          if [ "${PAUSED:-}" = "1" ]; then
             echo "sweep paused via REVIEW_PAUSED"
             echo "prs=[]" >> "$GITHUB_OUTPUT"
             exit 0
