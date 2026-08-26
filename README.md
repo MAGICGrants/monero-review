@@ -12,7 +12,7 @@ Upstream is never modified and does not need to know this exists.
 | Path | What it is |
 | --- | --- |
 | `.claude/skills/monero-security-review/SKILL.md` | Pass 1: the review instructions. The part worth iterating on. |
-| `.claude/skills/monero-security-review/references/` | Trust-boundary map and refutation patterns, read on demand. |
+| `.claude/skills/monero-security-review/references/` | Trust-boundary map, codebase notes, and refutation patterns, read on demand. |
 | `.claude/skills/monero-review-refute/SKILL.md` | Pass 2: attacks pass 1's findings. Default verdict REFUTED. |
 | `.github/workflows/security-review.yml` | Runs a review on GitHub-hosted runners, on demand or on a schedule. |
 | `review-local.sh` | The same review, run locally against your own `claude` CLI. No secrets, no runner. |

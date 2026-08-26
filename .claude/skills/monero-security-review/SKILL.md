@@ -37,6 +37,10 @@ Read these when the corresponding question comes up. They are in
 - **`references/trust-boundaries.md`** — where untrusted data enters, what
   "untrusted" means at each point, and severity anchoring per boundary. Read it
   when establishing reachability.
+- **`references/codebase-notes.md`** — how the tree is organised, what each
+  subsystem is supposed to guarantee, and the questions worth asking of each.
+  Read the section covering whichever subsystem the diff touches, early —
+  before you have formed a theory.
 - **`references/refutations.md`** — the recurring reasons candidate findings in
   this codebase turn out to be unreachable. Read it before reporting anything.
 

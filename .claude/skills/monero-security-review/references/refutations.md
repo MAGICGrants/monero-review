@@ -78,6 +78,32 @@ Before claiming integer overflow, check the actual types involved, including
 any promotion. `size_t` on 64-bit does not overflow at values an attacker can
 realistically supply through a size-limited message.
 
+## The race is actually serialized
+
+Before reporting concurrent access, establish that two threads genuinely reach
+the state at once. A great many candidates turn out to be sequenced by an
+existing lock or by the refresh cycle. This matters beyond a yes/no: if an
+operation is serialized, an attacker-influenced write to it is *deterministic*
+rather than racy, which is a different (often stronger, sometimes weaker) claim
+than the one the first pass made. Name the lock, or name the two call sites that
+run concurrently.
+
+## The divergent path does not ship
+
+For code with multiple implementations of the same computation — interpreter
+versus JIT, with and without hardware acceleration, per architecture — a
+difference between paths is only a consensus break if both paths run on real
+nodes. Establish which are built and used in production before assigning
+severity. A divergence on an architecture or build option nobody ships is a LOW.
+
+## The construction already constrains it
+
+In proof systems, an operation that looks wrong in isolation is often
+constrained by the surrounding protocol. Divisor arithmetic modulo the field
+prime, and point-versus-negation handling, have both repeatedly looked like
+breaks and turned out to be fine once the protocol's own constraints were taken
+into account. Read the construction, not just the function.
+
 ## It is test-only code
 
 Changes under `tests/` do not ship. They matter only if they also modify

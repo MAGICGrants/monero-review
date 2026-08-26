@@ -18,10 +18,13 @@ CONFIRMED.
 - `review.md` — the findings to attack.
 - The PR diff: `git diff $(git merge-base origin/master HEAD)...HEAD`
 - `PR_CONTEXT.md` — the PR title and description, if present.
-- `references/refutations.md` and `references/trust-boundaries.md` in the
-  `monero-security-review` skill directory — the recurring reasons findings in
-  this codebase turn out to be unreachable. Read `refutations.md` before you
-  start.
+- `references/` in the `monero-security-review` skill directory:
+  `refutations.md` (the recurring reasons findings here turn out to be
+  unreachable — read this before you start), `trust-boundaries.md`, and
+  `codebase-notes.md` (what each subsystem is supposed to guarantee). If a
+  finding concerns the wallet, `codebase-notes.md` also explains why "affects
+  the wallet" is not specific enough — check whether the claim holds for the
+  consumer it names.
 - A symbol index, if `tags` and `cscope.out` exist in the repository root:
   `cscope -d -L3 <fn>` for callers, `readtags -t tags <sym>` for definitions
   (check `cscope --help` if the arguments are rejected). Use it — imprecise
