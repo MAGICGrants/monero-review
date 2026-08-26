@@ -34,7 +34,7 @@ git -C "$CACHE" fetch --filter=blob:none --quiet origin \
   "+refs/pull/$PR/head:refs/heads/pr-$PR"
 git -C "$CACHE" checkout --quiet --force "pr-$PR"
 
-SHA=$(git -C "$CACHE" rev-parse --short HEAD)
+SHA=$(git -C "$CACHE" rev-parse HEAD | cut -c1-12)   # same width as the workflow
 echo "==> PR $PR is at $SHA"
 
 # The skill lives here, not in the Monero tree.
@@ -69,10 +69,18 @@ fi
 EXEC_FILES="$CACHE/exec.json"
 if grep -q '^## Findings' "$CACHE/review.md"; then
   echo "==> findings present, verifying"
-  ( cd "$CACHE" && claude -p "/monero-review-refute" \
-      --model "$MODEL" --output-format json --allowedTools "$TOOLS" \
-      > exec-refute.json )
-  EXEC_FILES="$EXEC_FILES,$CACHE/exec-refute.json"
+  # Tolerate failure here: pass 1's work still has value, but it must be
+  # labelled, because unverified findings are mostly false positives.
+  if ( cd "$CACHE" && claude -p "/monero-review-refute" \
+         --model "$MODEL" --output-format json --allowedTools "$TOOLS" \
+         > exec-refute.json ); then
+    EXEC_FILES="$EXEC_FILES,$CACHE/exec-refute.json"
+  else
+    echo "!! verification pass failed -- findings are UNVERIFIED" >&2
+    printf '> **UNVERIFIED** — the adversarial verification pass did not\n> complete. Expect false positives.\n\n%s\n' \
+      "$(cat "$CACHE/review.md")" > "$CACHE/review.md.tmp"
+    mv "$CACHE/review.md.tmp" "$CACHE/review.md"
+  fi
 else
   echo "==> no findings, skipping verification"
 fi

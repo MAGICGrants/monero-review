@@ -5,8 +5,8 @@ Use this to answer the reachability question concretely: name the boundary, then
 trace the call sequence from it to the changed code.
 
 Verify locations against the checkout — this is a map, not a substitute for
-reading the tree. Use the symbol index (`readtags -n <sym>`, `cscope -dL3 <fn>`)
-to confirm callers rather than assuming.
+reading the tree. Use the symbol index (`readtags -t tags <sym>` for
+definitions, `cscope -d -L3 <fn>` for callers) rather than assuming.
 
 ## 1. P2P messages — any peer, no authentication
 

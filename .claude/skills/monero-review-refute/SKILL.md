@@ -41,7 +41,7 @@ code say what the finding says it says? Misread control flow is the most common
 first-pass error. If the citation is wrong, that alone is REFUTED.
 
 **2. Attack reachability.** The finding names an entry point and a call
-sequence. Verify every link with `cscope -dL3`, not by assumption. Ask: is the
+sequence. Verify every link with `cscope -d -L3`, not by assumption. Ask: is the
 function actually called from the claimed boundary? Is there a caller that
 already validates the precondition? Is the whole path behind a config option,
 and what is its default?

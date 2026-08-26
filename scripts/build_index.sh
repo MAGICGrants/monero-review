@@ -17,10 +17,24 @@ fi
 
 # Security surface only. tests/ and utils/ are excluded to keep the index
 # small and the caller lists free of harness noise.
-find src contrib -type f \
+#
+# Collect the directories that exist first: `find a b` where b is missing exits
+# non-zero *after* writing a's results, and a `|| :` fallback would then discard
+# them. UPSTREAM is configurable, so don't assume Monero's layout.
+dirs=""
+for d in src contrib; do
+  [ -d "$d" ] && dirs="$dirs $d"
+done
+if [ -z "$dirs" ]; then
+  echo "index: no src/ or contrib/ here, skipping" >&2
+  exit 0
+fi
+
+# shellcheck disable=SC2086  # word splitting on $dirs is intended
+find $dirs -type f \
   \( -name '*.c'  -o -name '*.cc'  -o -name '*.cpp' \
   -o -name '*.h'  -o -name '*.hpp' -o -name '*.inl' \) \
-  > cscope.files 2>/dev/null || : > cscope.files
+  > cscope.files 2>/dev/null || true
 
 count=$(wc -l < cscope.files | tr -d ' ')
 if [ "$count" = "0" ]; then

@@ -33,6 +33,13 @@ next push.
 Pass 2 is skipped when pass 1 finds nothing, which is most PRs, so the common
 case costs one invocation.
 
+Verification is treated as part of the deliverable. If pass 1 finds something
+and pass 2 does not complete, **no issue is filed** — the findings go to the run
+summary marked UNVERIFIED, no dedup marker is created, and the PR stays in the
+queue to be reviewed again. Filing them would put unverified findings under a
+title indistinguishable from a complete review, and since the issue *is* the
+dedup marker, the PR would never be looked at again.
+
 Neither pass gains any new capability: still no network, no GitHub API, nothing
 outward-facing.
 
@@ -212,9 +219,10 @@ so you can review something urgent while the sweep is paused.
 ## Design notes
 
 **Claude has no outward write capability.** Its allowed tools are `Read`,
-`Grep`, `Glob`, `Write`, and three read-only git subcommands. No GitHub API, no
-MCP server, no network. It produces `review.md`; the workflow — plain bash, not
-the model — decides what happens to that file.
+`Grep`, `Glob`, `Write`, five read-only git subcommands (`diff`, `log`, `show`,
+`blame`, `merge-base`), and the two index readers (`readtags`, `cscope`). No
+GitHub API, no MCP server, no network. It produces `review.md`; the workflow —
+plain bash, not the model — decides what happens to that file.
 
 This matters because the code under review is written by strangers and this
 tooling is not hardened against prompt injection. Under this design a malicious

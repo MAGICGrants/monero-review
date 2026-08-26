@@ -69,7 +69,7 @@ your refutation depends on an assertion, say which kind it is.
 
 C++ makes this easy to miss: the dangerous function is a private helper with
 one or two callers that both check the precondition. Use the symbol index
-(`cscope -dL3 <fn>`) to enumerate callers rather than assuming, then read each
+(`cscope -d -L3 <fn>`) to enumerate callers rather than assuming, then read each
 one. A helper with no external caller is not remotely reachable.
 
 ## The type is wide enough

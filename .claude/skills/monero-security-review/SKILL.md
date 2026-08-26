@@ -53,10 +53,17 @@ macros, and reachability claims are the load-bearing part of every finding.
 Two index files may exist in the repository root: `tags` (ctags) and
 `cscope.out` (cscope). Check with Glob before relying on them.
 
-- `readtags -t tags <symbol>` — where a symbol is defined.
+- `readtags -t tags <symbol>` — **where a symbol is defined.** Use this for
+  definitions, not cscope: cscope's `-L1` misses most C++ definitions in this
+  tree, while ctags finds them reliably.
 - `cscope -d -L3 <function>` — **functions calling this function.** This is the
-  one that answers reachability.
-- `cscope -d -L1 <symbol>` — definitions. `-L0` for all references.
+  one that answers reachability, and it works well here.
+- `cscope -d -L0 <symbol>` — all references, when you need every mention rather
+  than just call sites.
+
+Both are indexes, so both can be stale or incomplete. Treat a *hit* as reliable
+and a *miss* as inconclusive: "cscope reports no callers" is good evidence a
+helper is internal, but confirm with Grep before resting a finding on it.
 
 If a command errors on its arguments, check `readtags -h` or `cscope --help`
 and adapt — do not silently give up on it. If the index files are absent
@@ -81,7 +88,7 @@ something away.
 
 **3. Establish reachability.** For each changed function, determine whether
 untrusted input can reach it, and name the path. Enumerate callers with
-`cscope -dL3 <function>` rather than assuming — a helper with no external
+`cscope -d -L3 <function>` rather than assuming — a helper with no external
 caller is not remotely reachable, and that is worth knowing before you spend
 effort on it. Monero's trust boundaries (detail in
 `references/trust-boundaries.md`):
