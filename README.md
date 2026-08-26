@@ -112,8 +112,11 @@ Locally, with no GitHub involvement at all:
 
 ## The drip
 
-The `schedule:` block is commented out deliberately. Run a few reviews by hand
-first, see what they cost, then enable it.
+**The drip is enabled**: `*/30 * * * *`. Pause it any time with
+
+```bash
+gh variable set REVIEW_PAUSED --body 1 --repo xmrack/monero-review
+```
 
 It is a **work queue polled every 30 minutes, one PR per tick** — not a daily
 batch. That shape is deliberate: Claude subscription limits are rolling 5-hour
@@ -136,8 +139,15 @@ API probe per tick and become eligible automatically if they later add code.
 Deduplication is keyed on **head SHA**, not PR number. A PR sitting untouched is
 reviewed once; a PR force-pushed three times is reviewed three times; a PR that
 collects twenty comments and no new commits is reviewed once. Cost tracks real
-code churn. A failed run deliberately files no issue, so it leaves no marker and
-is retried on the next tick rather than being silently blackholed.
+code churn.
+
+A failed run files no *review* issue, so it leaves no success marker and is
+retried rather than silently blackholed. It does file a `Review FAILED:` issue,
+and after `MAX_ATTEMPTS` (2) of those at the same head SHA the queue gives up
+and moves on. Without that cap, a PR that reliably times out would be the newest
+unreviewed item on every tick forever — blocking everything behind it and
+re-burning the budget each time. Attempts are keyed on SHA, so a repush makes
+the PR eligible again with a clean slate.
 
 ### Sizing the first drain
 

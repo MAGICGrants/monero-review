@@ -15,6 +15,7 @@ per tick and become eligible automatically if they later add code.
 Env: UPSTREAM, REVIEW_REPO, MAX_AGE_DAYS, BATCH, GH_TOKEN (optional), API
      (optional base URL, for testing).
 """
+import collections
 import datetime
 import json
 import os
@@ -47,6 +48,11 @@ WORTHLESS = re.compile(
 # doc-only PRs can't turn into an unbounded API sweep.
 MAX_PROBES = 20
 
+# Failed attempts at the same head SHA before the queue moves on. 2 gives a
+# transient failure one retry without letting a reliably-failing PR block
+# everything behind it.
+MAX_ATTEMPTS = 2
+
 
 def get(path, params=None):
     url = f"{API}{path}"
@@ -61,9 +67,15 @@ def get(path, params=None):
         return json.load(resp)
 
 
-def reviewed_shas(repo):
-    """Every 12-char SHA recorded in this repo's issue titles."""
-    seen = set()
+def review_state(repo):
+    """Read this repo's issue titles as the record of what has been attempted.
+
+    Returns (done, failed): SHAs with a completed review, and a count of
+    failed attempts per SHA. A SHA is retried after a failure -- but only
+    MAX_ATTEMPTS times, or a PR that reliably fails would be the newest
+    unreviewed item on every tick and block the queue forever.
+    """
+    done, failed = set(), collections.Counter()
     for page in range(1, 11):
         try:
             issues = get(f"/repos/{repo}/issues",
@@ -71,14 +83,19 @@ def reviewed_shas(repo):
         except urllib.error.HTTPError as exc:
             print(f"warn: issue listing failed ({exc.code}); "
                   "assuming nothing reviewed", file=sys.stderr)
-            return seen
+            return done, failed
         if not issues:
             break
         for issue in issues:
-            seen.update(re.findall(r"\b[0-9a-f]{12}\b", issue.get("title", "")))
+            title = issue.get("title", "")
+            shas = re.findall(r"\b[0-9a-f]{12}\b", title)
+            if title.startswith("Review FAILED:"):
+                failed.update(shas)
+            else:
+                done.update(shas)
         if len(issues) < 100:
             break
-    return seen
+    return done, failed
 
 
 def worth_reviewing(upstream, number):
@@ -93,6 +110,10 @@ def worth_reviewing(upstream, number):
     names = [f["filename"] for f in files]
     if not names:
         return False, names
+    # A full page means there are more files we cannot see. Fail open rather
+    # than judge a large PR on a truncated list.
+    if len(names) >= 100:
+        return True, names
     return (not all(WORTHLESS.search(n) for n in names)), names
 
 
@@ -109,12 +130,22 @@ def main():
         "state": "open", "per_page": 100,
         "sort": "updated", "direction": "desc",
     })
-    done = reviewed_shas(repo)
+    done, failed = review_state(repo)
+
+    def pending(p):
+        sha = p["head"]["sha"][:12]
+        if sha in done:
+            return False
+        if failed[sha] >= MAX_ATTEMPTS:
+            print(f"  give up on #{p['number']}: {failed[sha]} failed attempts "
+                  f"at {sha}", file=sys.stderr)
+            return False
+        return True
 
     queue = [p for p in prs
              if not p["draft"]
              and p["updated_at"] > cutoff
-             and p["head"]["sha"][:12] not in done]
+             and pending(p)]
     queue.sort(key=lambda p: p["updated_at"], reverse=True)
     print(f"{len(queue)} unreviewed PR(s) updated since {cutoff}",
           file=sys.stderr)
