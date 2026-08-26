@@ -223,17 +223,47 @@ jobs:
       # forever -- it blocks the queue and re-burns the budget each time.
       # `select` gives up on a SHA after MAX_ATTEMPTS of these, so one
       # transient failure still gets a retry.
+      #
+      # But only count attempts where the review actually got to run. Hitting a
+      # Claude usage limit fails in seconds, and is a property of the account,
+      # not of this PR -- counting those would march down the queue abandoning
+      # every PR in it two ticks at a time. A real per-PR failure (a timeout on
+      # a large diff) takes minutes, so elapsed time separates the two.
       - name: Record failed attempt
         if: failure() && env.HEAD_SHA != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MIN_REAL_ATTEMPT_SECONDS: "120"
         run: |
           set -euo pipefail
+          started=${T0:-0}
+          if [ "$started" = "0" ]; then
+            echo "failed before the review started -- not counting an attempt"
+            exit 0
+          fi
+          elapsed=$(( $(date +%s) - started ))
+          if [ "$elapsed" -lt "$MIN_REAL_ATTEMPT_SECONDS" ]; then
+            echo "review failed after ${elapsed}s -- too fast to be this PR's"
+            echo "fault (usage limit, auth, or infrastructure). Not counting an"
+            echo "attempt; this PR stays in the queue."
+            {
+              echo "### $UPSTREAM#${{ matrix.pr }} not reviewed"
+              echo "Failed after ${elapsed}s — most likely a Claude usage limit."
+              echo "The PR was **not** penalised and will be retried."
+              echo ""
+              echo "If this repeats, pause the drip:"
+              echo '```'
+              echo "gh variable set REVIEW_PAUSED --body 1 --repo $GITHUB_REPOSITORY"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "review failed after ${elapsed}s -- counting a real attempt"
           gh label create review-failed --force >/dev/null 2>&1 || true
           gh issue create --repo "$GITHUB_REPOSITORY" \
             --title "Review FAILED: $UPSTREAM#${{ matrix.pr }} @ $HEAD_SHA" \
             --label review-failed \
-            --body "Run did not produce a review: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            --body "Run did not produce a review after ${elapsed}s: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       - uses: actions/upload-artifact@v5
         if: always()

@@ -179,6 +179,26 @@ the bursts this design exists to avoid.
 Workflow-level `concurrency` serialises everything, so overlapping ticks collapse
 into one pending run and two runs can never pick the same PR.
 
+### When you hit a usage limit
+
+Runs authenticate with a Claude subscription, so "out of credits" means a
+rolling 5-hour or weekly limit, not a balance. The Claude step fails in seconds
+and the run is marked failed.
+
+Nothing is corrupted by this. No review issue is filed, so no false dedup marker
+is created, and the PR stays in the queue. Crucially, a fast failure does **not**
+count against `MAX_ATTEMPTS`: a usage limit is a property of the account, not of
+the PR, and counting it would march down the queue abandoning every PR in it two
+ticks at a time. Only failures that ran long enough to be a genuine attempt
+(120s+, i.e. a real timeout on a large diff) are counted.
+
+The cost of waiting it out is one failed workflow run every 30 minutes — a few
+Actions minutes and some noise, no tokens, since the request fails before any
+work happens. Everything resumes on its own once the window rolls over.
+
+If the noise bothers you, or you want the headroom back for interactive work,
+pause it:
+
 ### Kill switch
 
 ```bash
