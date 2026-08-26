@@ -94,6 +94,14 @@ Each tick makes two cheap API calls in the `select` job — open PRs upstream, a
 the issue titles in this repo — and starts a review runner only if something is
 actually unreviewed. Idle ticks cost nothing but Actions minutes.
 
+PRs with nothing to review are filtered out before a runner starts: if every
+changed file is documentation, a translation, a license, or an issue template,
+the PR is skipped and never consumes a review slot. The classifier deliberately
+fails **open** — build files, CI workflows, and anything under `src/` or
+`contrib/` stay reviewable, because a malicious build or workflow change is a
+real supply-chain concern. Skipped PRs are not marked, so they cost one cheap
+API probe per tick and become eligible automatically if they later add code.
+
 Deduplication is keyed on **head SHA**, not PR number. A PR sitting untouched is
 reviewed once; a PR force-pushed three times is reviewed three times; a PR that
 collects twenty comments and no new commits is reviewed once. Cost tracks real

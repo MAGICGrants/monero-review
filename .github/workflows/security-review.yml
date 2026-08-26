@@ -54,9 +54,13 @@ jobs:
     outputs:
       prs: ${{ steps.pick.outputs.prs }}
     steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - id: pick
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REVIEW_REPO: ${{ github.repository }}
           WANT: ${{ inputs.pr || 'sweep' }}
           PAUSED: ${{ vars.REVIEW_PAUSED }}
         run: |
@@ -72,33 +76,7 @@ jobs:
             echo "prs=[]" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-
-          gh pr list --repo "$UPSTREAM" --state open --limit 300 \
-            --json number,updatedAt,isDraft,headRefOid > prs.json
-          # Our own issue titles carry "#<pr> @ <sha12>", so they are the record
-          # of what has already been reviewed. One listing, strongly consistent.
-          gh issue list --repo "$GITHUB_REPOSITORY" --state all --limit 1000 \
-            --json title --jq '.[].title' > reviewed.txt || : > reviewed.txt
-
-          python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          import datetime, json, os
-
-          cutoff = (datetime.datetime.now(datetime.timezone.utc)
-                    - datetime.timedelta(days=int(os.environ["MAX_AGE_DAYS"]))
-                    ).strftime("%Y-%m-%dT%H:%M:%SZ")
-          reviewed = open("reviewed.txt").read()
-
-          queue = [p for p in json.load(open("prs.json"))
-                   if not p["isDraft"]
-                   and p["updatedAt"] > cutoff
-                   and p["headRefOid"][:12] not in reviewed]
-          # Most recently active first: fresh work is worth more than backlog.
-          queue.sort(key=lambda p: p["updatedAt"], reverse=True)
-
-          picked = [str(p["number"]) for p in queue[:int(os.environ["BATCH"])]]
-          print(f"{len(queue)} unreviewed in window, taking {picked}", file=__import__("sys").stderr)
-          print("prs=" + json.dumps(picked))
-          PY
+          python3 scripts/select_prs.py >> "$GITHUB_OUTPUT"
 
   review:
     needs: select
