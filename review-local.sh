@@ -67,7 +67,7 @@ fi
 
 # Adversarial second pass, only if the first found something to attack.
 EXEC_FILES="$CACHE/exec.json"
-if grep -q '^## Findings' "$CACHE/review.md"; then
+if grep -Eq '^###[[:space:]]*\[(CRITICAL|HIGH|MEDIUM|LOW)' "$CACHE/review.md"; then
   echo "==> findings present, verifying"
   # Tolerate failure here: pass 1's work still has value, but it must be
   # labelled, because unverified findings are mostly false positives.

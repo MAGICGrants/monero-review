@@ -185,11 +185,16 @@ jobs:
       - name: Anything to verify?
         id: triage
         run: |
-          if [ -s review.md ] && grep -q '^## Findings' review.md; then
+          # Match a severity-tagged finding heading, not the section header.
+          # Pass 1 sometimes writes "## Findings" followed by "None." despite
+          # being told to omit the section, and grepping the header alone paid
+          # for a whole verification pass with nothing to verify.
+          if [ -s review.md ] && \
+             grep -Eq '^###[[:space:]]*\[(CRITICAL|HIGH|MEDIUM|LOW)' review.md; then
             echo "verify=true" >> "$GITHUB_OUTPUT"
             echo "first pass produced findings, running verification"
           else
-            echo "no findings, skipping verification"
+            echo "no severity-tagged findings, skipping verification"
           fi
 
       # Adversarial second pass: attack every finding, default verdict REFUTED.
