@@ -98,6 +98,20 @@ def review_state(repo):
     return done, failed
 
 
+def local_reviewed(dirpath):
+    """SHAs already reviewed locally.
+
+    review-local.sh names its output reviews/pr-<number>-<sha12>.md, so the
+    directory listing *is* the local dedup record -- no extra state file.
+    """
+    seen = set()
+    if not dirpath or not os.path.isdir(dirpath):
+        return seen
+    for name in os.listdir(dirpath):
+        seen.update(re.findall(r"\b[0-9a-f]{12}\b", name))
+    return seen
+
+
 def worth_reviewing(upstream, number):
     """False only if every changed file is documentation-ish."""
     try:
@@ -131,6 +145,13 @@ def main():
         "sort": "updated", "direction": "desc",
     })
     done, failed = review_state(repo)
+
+    # Local runs record themselves as filenames; count those as done too, so a
+    # locally driven drip and the CI workflow don't duplicate each other's work.
+    local = local_reviewed(os.environ.get("REVIEWS_DIR"))
+    if local:
+        print(f"{len(local)} SHA(s) already reviewed locally", file=sys.stderr)
+        done |= local
 
     def pending(p):
         sha = p["head"]["sha"][:12]

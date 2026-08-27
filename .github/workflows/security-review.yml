@@ -17,15 +17,11 @@ on:
           - claude-opus-5
           - claude-sonnet-5
 
-  # Frequent, low-volume drip. One PR per tick keeps any single rolling 5-hour
-  # Claude window carrying a small load instead of one daily burst that could
-  # exhaust it and block your interactive sessions. Most ticks find nothing to
-  # do and cost nothing.
-  #
-  # Stop it without editing this file:
-  #   gh variable set REVIEW_PAUSED --body 1 --repo <this repo>
-  schedule:
-    - cron: "*/30 * * * *"
+  # No `schedule:` on purpose. GitHub never fired one for this repo -- the
+  # workflow stayed `active` with the cron correctly on the default branch and
+  # not a single scheduled run was created over many hours. Scheduled workflows
+  # are best-effort on public repos and get deprioritised. The drip runs from a
+  # real crontab instead: scripts/drip.sh.
 
 env:
   UPSTREAM: monero-project/monero
