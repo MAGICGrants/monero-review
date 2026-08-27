@@ -50,6 +50,11 @@ set -euo pipefail
 
 REPO=${REPO:-xmrack/monero-review}
 WORKFLOW=${WORKFLOW:-review.yml}
+# Sweeps run on Sonnet. The workflow's `model` input defaults to Opus for
+# hand-picked reviews, and a dispatch that omits it inherits that default -- so
+# an unattended drip would silently run every PR on Opus (~$3.69 API-equivalent
+# per review measured, several times Sonnet). Pass it explicitly.
+MODEL=${MODEL:-claude-sonnet-5}
 TOKEN_FILE=${TOKEN_FILE:-$HOME/.config/monero-review.token}
 
 # cron gives you a near-empty PATH.
@@ -126,8 +131,9 @@ fi
 
 # `-f pr=sweep` means "take the next unreviewed PR from the queue". The workflow
 # does its own dedup, so a tick with nothing to do is cheap and files nothing.
-if out=$(GH_TOKEN="$token" gh workflow run "$WORKFLOW" --repo "$REPO" -f pr=sweep 2>&1); then
-  log "dispatched sweep to $REPO"
+if out=$(GH_TOKEN="$token" gh workflow run "$WORKFLOW" --repo "$REPO" \
+           -f pr=sweep -f model="$MODEL" 2>&1); then
+  log "dispatched sweep to $REPO on $MODEL"
 else
   log "ERROR: dispatch failed: $out"
   case "$out" in
