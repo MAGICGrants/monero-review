@@ -98,3 +98,23 @@ registered" from "was disabled". Read `state`, never write it.
 `.claude/skills/monero-security-review/SKILL.md` is the review itself — edit
 that if the output isn't sharp enough. `scripts/select_prs.py` decides which PR
 is next and skips ones already reviewed.
+
+## Two ways to drive it
+
+Run **one** of these, not both — they keep separate records of what's been
+reviewed and will otherwise double-spend your Claude limits.
+
+**Results as issues, review runs on GitHub** (`scripts/dispatch.sh`). Needs a
+fine-grained token scoped to this repo with only `Actions: write`; setup is in
+the script's header.
+
+```
+23,53 * * * * /home/jack/Desktop/monero-review/scripts/dispatch.sh >> /tmp/monero-review.log 2>&1
+```
+
+**Results on disk, review runs locally** (`scripts/drip.sh`). No credential at
+all.
+
+```
+23,53 * * * * /home/jack/Desktop/monero-review/scripts/drip.sh >> /tmp/monero-review.log 2>&1
+```
