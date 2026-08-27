@@ -17,17 +17,17 @@ on:
           - claude-opus-5
           - claude-sonnet-5
 
-  # Six times a day, at :17 past.
+  # Every 20 minutes, at :07 :27 :47.
   #
-  # An earlier `*/30` never fired once in 5.5 hours. GitHub deprioritises
-  # frequent schedules on public repos and explicitly advises against the top
-  # of the hour, which is the most congested minute -- `*/30` hits :00 and :30,
-  # the two worst. This is the conservative retry: an odd minute, wide spacing.
+  # An earlier `*/30` never fired once in 5.5 hours. It hit :00 and :30 -- the
+  # most congested minutes, which GitHub's own guidance says to avoid. These are
+  # odd minutes nobody else picks, so the schedule gets a fair test while still
+  # giving plenty of chances to fire.
   #
   # Stop it without editing this file:
   #   gh variable set REVIEW_PAUSED --body 1 --repo <this repo>
   schedule:
-    - cron: "17 2,6,10,14,18,22 * * *"
+    - cron: "7,27,47 * * * *"
 
 env:
   UPSTREAM: monero-project/monero
@@ -35,10 +35,9 @@ env:
   # measured 2026-08-26, the starting queue is ~22 PRs at 1 day, ~33 at 2,
   # ~42 at 3. Start at 1 so the first drain is survivable, then widen.
   MAX_AGE_DAYS: 1
-  # PRs reviewed per tick. Six ticks a day at BATCH 1 would not keep up with
-  # upstream; 2 gives ~12/day, still spread across well-separated times. Each
-  # matrix leg is its own job with its own timeout, run one at a time.
-  BATCH: 2
+  # PRs reviewed per tick. Back to 1 now that ticks are frequent again -- at
+  # three an hour, 2 would be a lot of subscription for one afternoon.
+  BATCH: 1
 
 # One review at a time, repo-wide. Rapid ticks collapse into a single pending
 # run rather than stacking, and no two runs can pick the same PR concurrently.

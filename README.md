@@ -25,9 +25,9 @@ gh workflow run security-review.yml --repo xmrack/monero-review -f pr=11155
 
 ## Review new PRs automatically
 
-The workflow runs itself six times a day — 02:17, 06:17, 10:17, 14:17, 18:17
-and 22:17 UTC — reviewing up to two PRs each time and filing what it finds as
-an issue here. Nothing to set up.
+The workflow runs itself every 20 minutes — at :07, :27 and :47 past the hour —
+reviewing one PR each time and filing what it finds as an issue here. Nothing to
+set up.
 
 Pause it with:
 
@@ -40,14 +40,15 @@ gh variable set REVIEW_PAUSED --body 1 --repo xmrack/monero-review
 ### If the schedule doesn't fire
 
 GitHub runs scheduled workflows on a best-effort basis for public repos, and an
-earlier every-30-minutes schedule here never fired once. The times above use an
-odd minute and wide spacing, which is what GitHub's own guidance suggests.
+earlier every-30-minutes schedule here never fired once — it ran at :00 and :30,
+the most congested minutes, which GitHub's own guidance says to avoid. The times
+above are odd minutes nobody else picks.
 
 If that still doesn't work, `scripts/drip.sh` does the same review on your own
 machine from cron, with no credentials:
 
 ```
-17 2,6,10,14,18,22 * * * /home/jack/Desktop/monero-review/scripts/drip.sh >> /tmp/monero-review.log 2>&1
+7,27,47 * * * * /home/jack/Desktop/monero-review/scripts/drip.sh >> /tmp/monero-review.log 2>&1
 ```
 
 ## Where things are
