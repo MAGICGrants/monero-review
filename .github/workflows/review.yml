@@ -269,9 +269,33 @@ jobs:
             cat review.md
           } >> "$GITHUB_STEP_SUMMARY"
           gh label create "pr-${{ matrix.pr }}" --force >/dev/null 2>&1 || true
+          labels="pr-${{ matrix.pr }}"
+
+          # Severity labels, from findings that survived verification only --
+          # refuted ones stay in the report but must not tag the issue.
+          sevs=$(python3 .harness/scripts/labels.py review.md || true)
+          for sev in $sevs; do
+            case "$sev" in
+              critical) colour=B60205 ;;
+              high)     colour=D93F0B ;;
+              medium)   colour=FBCA04 ;;
+              low)      colour=0E8A16 ;;
+              *)        continue ;;
+            esac
+            gh label create "$sev" --color "$colour" --force \
+              --description "Review found a $sev severity issue" \
+              >/dev/null 2>&1 || true
+            labels="$labels,$sev"
+          done
+
+          [ -n "$sevs" ] && echo "labelling: $labels"
+
+          # The title format is a contract: select_prs.py and status.py read the
+          # "Review:" prefix and the 12-char SHA as the dedup record. Severity
+          # goes in labels, not the title, so that contract stays untouched.
           gh issue create --repo "$GITHUB_REPOSITORY" \
             --title "Review: $UPSTREAM#${{ matrix.pr }} @ $SHA" \
-            --body-file review.md --label "pr-${{ matrix.pr }}"
+            --body-file review.md --label "$labels"
 
       # Head-of-line protection. Without a record of the attempt, a PR that
       # reliably fails or times out is the newest unreviewed item every tick
