@@ -92,11 +92,56 @@ case "$token" in
     ;;
 esac
 
+# `--check` reports what the token can and cannot do, without dispatching and
+# without ever printing the token. Use it after creating or rotating one.
+if [ "${1:-}" = "--check" ]; then
+  log "checking token against $REPO"
+
+  if GH_TOKEN="$token" gh api "repos/$REPO" --jq .full_name >/dev/null 2>&1; then
+    log "  ok    can see the repository (token is valid and scoped to it)"
+  else
+    log "  FAIL  cannot see $REPO at all"
+    log "        -> the token is invalid, expired, or its Repository access"
+    log "           does not include this repo"
+    exit 1
+  fi
+
+  if GH_TOKEN="$token" gh api "repos/$REPO/actions/workflows" \
+       --jq '.total_count' >/dev/null 2>&1; then
+    log "  ok    Actions: read"
+  else
+    log "  FAIL  Actions: read is missing"
+    log "        -> set Permissions > Repository > Actions to Read and write"
+    exit 1
+  fi
+
+  # There is no read-only probe for dispatch, so infer from the runs endpoint,
+  # which needs the same Actions permission, then say what to do.
+  log "  note  dispatch needs Actions: WRITE, which has no read-only probe."
+  log "        If a real run still 403s, Actions is set to Read-only."
+  log "        Fix at https://github.com/settings/personal-access-tokens"
+  log "        Permissions > Repository > Actions > Read and write"
+  exit 0
+fi
+
 # `-f pr=sweep` means "take the next unreviewed PR from the queue". The workflow
 # does its own dedup, so a tick with nothing to do is cheap and files nothing.
-if GH_TOKEN="$token" gh workflow run "$WORKFLOW" --repo "$REPO" -f pr=sweep 2>&1; then
+if out=$(GH_TOKEN="$token" gh workflow run "$WORKFLOW" --repo "$REPO" -f pr=sweep 2>&1); then
   log "dispatched sweep to $REPO"
 else
-  log "ERROR: dispatch failed"
+  log "ERROR: dispatch failed: $out"
+  case "$out" in
+    *"Resource not accessible"*|*403*)
+      log "  the token cannot dispatch this workflow. Almost always Actions is"
+      log "  set to Read-only rather than Read and write:"
+      log "    https://github.com/settings/personal-access-tokens"
+      log "    -> your token -> Permissions -> Repository -> Actions"
+      log "  Re-run with --check to confirm what it can see."
+      ;;
+    *404*)
+      log "  workflow '$WORKFLOW' not found, or the token cannot see the repo."
+      log "  The file is .github/workflows/$WORKFLOW on the default branch."
+      ;;
+  esac
   exit 1
 fi
