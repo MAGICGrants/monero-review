@@ -17,17 +17,18 @@ on:
           - claude-opus-5
           - claude-sonnet-5
 
-  # Every 20 minutes, at :07 :27 :47.
+  # Every 5 minutes -- GitHub's documented floor for scheduled workflows.
+  # `* * * * *` is not possible: anything under 5 minutes is ignored.
   #
-  # An earlier `*/30` never fired once in 5.5 hours. It hit :00 and :30 -- the
-  # most congested minutes, which GitHub's own guidance says to avoid. These are
-  # odd minutes nobody else picks, so the schedule gets a fair test while still
-  # giving plenty of chances to fire.
+  # Cost is bounded by the concurrency group below, not by this number: only
+  # one review runs at a time and extra ticks collapse into a single pending
+  # run, so a review taking ~10 minutes caps this at roughly 6 reviews/hour
+  # however often the trigger fires.
   #
   # Stop it without editing this file:
   #   gh variable set REVIEW_PAUSED --body 1 --repo <this repo>
   schedule:
-    - cron: "7,27,47 * * * *"
+    - cron: "*/5 * * * *"
 
 env:
   UPSTREAM: monero-project/monero

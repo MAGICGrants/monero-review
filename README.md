@@ -25,9 +25,9 @@ gh workflow run security-review.yml --repo xmrack/monero-review -f pr=11155
 
 ## Review new PRs automatically
 
-The workflow runs itself every 20 minutes — at :07, :27 and :47 past the hour —
-reviewing one PR each time and filing what it finds as an issue here. Nothing to
-set up.
+The workflow runs itself every 5 minutes (GitHub's shortest allowed interval),
+reviewing one PR each time and filing what it finds as an issue here. Only one
+review runs at a time, so this works out at roughly 6 an hour at most.
 
 Pause it with:
 
