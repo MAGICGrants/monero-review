@@ -111,7 +111,10 @@ jobs:
     needs: select
     if: needs.select.outputs.prs != '' && needs.select.outputs.prs != '[]'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # Raised alongside --max-turns 100: a large diff that needs 100 turns needs
+    # the wall clock to spend them in, or the turn limit is just swapped for a
+    # timeout. Per matrix leg, so BATCH=2 gets this each.
+    timeout-minutes: 75
     permissions:
       contents: read
       issues: write
@@ -177,7 +180,7 @@ jobs:
           prompt: "/monero-security-review"
           claude_args: |
             --model ${{ inputs.model || 'claude-sonnet-5' }}
-            --max-turns 60
+            --max-turns 100
             --allowedTools "Read,Grep,Glob,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*),Bash(git merge-base:*),Bash(readtags:*),Bash(cscope:*)"
 
       # Only verify if the first pass actually found something. Most PRs
