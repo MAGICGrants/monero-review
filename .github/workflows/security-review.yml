@@ -17,11 +17,17 @@ on:
           - claude-opus-5
           - claude-sonnet-5
 
-  # No `schedule:` on purpose. GitHub never fired one for this repo -- the
-  # workflow stayed `active` with the cron correctly on the default branch and
-  # not a single scheduled run was created over many hours. Scheduled workflows
-  # are best-effort on public repos and get deprioritised. The drip runs from a
-  # real crontab instead: scripts/drip.sh.
+  # Six times a day, at :17 past.
+  #
+  # An earlier `*/30` never fired once in 5.5 hours. GitHub deprioritises
+  # frequent schedules on public repos and explicitly advises against the top
+  # of the hour, which is the most congested minute -- `*/30` hits :00 and :30,
+  # the two worst. This is the conservative retry: an odd minute, wide spacing.
+  #
+  # Stop it without editing this file:
+  #   gh variable set REVIEW_PAUSED --body 1 --repo <this repo>
+  schedule:
+    - cron: "17 2,6,10,14,18,22 * * *"
 
 env:
   UPSTREAM: monero-project/monero
@@ -29,8 +35,10 @@ env:
   # measured 2026-08-26, the starting queue is ~22 PRs at 1 day, ~33 at 2,
   # ~42 at 3. Start at 1 so the first drain is survivable, then widen.
   MAX_AGE_DAYS: 1
-  # PRs reviewed per tick. Raising this is what reintroduces bursts.
-  BATCH: 1
+  # PRs reviewed per tick. Six ticks a day at BATCH 1 would not keep up with
+  # upstream; 2 gives ~12/day, still spread across well-separated times. Each
+  # matrix leg is its own job with its own timeout, run one at a time.
+  BATCH: 2
 
 # One review at a time, repo-wide. Rapid ticks collapse into a single pending
 # run rather than stacking, and no two runs can pick the same PR concurrently.

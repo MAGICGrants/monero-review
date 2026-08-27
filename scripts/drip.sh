@@ -4,7 +4,9 @@
 # No GitHub credential: the claude CLI is already authenticated, and picking
 # which PR to review only reads public data. Results land in reviews/.
 #
-# GitHub's own scheduler never fired for this repo, so this is the drip.
+# This is the FALLBACK. The workflow has its own schedule: and files results as
+# issues; use this only if GitHub's scheduler turns out not to fire (an earlier
+# every-30-minutes schedule here never did). Results stay local.
 #
 # Setup:
 #   crontab -e   # add, with absolute paths:

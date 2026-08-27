@@ -25,24 +25,30 @@ gh workflow run security-review.yml --repo xmrack/monero-review -f pr=11155
 
 ## Review new PRs automatically
 
-`scripts/drip.sh` reviews the next unreviewed PR, one per run. Put it in cron:
+The workflow runs itself six times a day — 02:17, 06:17, 10:17, 14:17, 18:17
+and 22:17 UTC — reviewing up to two PRs each time and filing what it finds as
+an issue here. Nothing to set up.
+
+Pause it with:
 
 ```bash
-crontab -e
+gh variable set REVIEW_PAUSED --body 1 --repo xmrack/monero-review
 ```
 
+`--body 0` resumes. Reviewing a specific PR by number still works while paused.
+
+### If the schedule doesn't fire
+
+GitHub runs scheduled workflows on a best-effort basis for public repos, and an
+earlier every-30-minutes schedule here never fired once. The times above use an
+odd minute and wide spacing, which is what GitHub's own guidance suggests.
+
+If that still doesn't work, `scripts/drip.sh` does the same review on your own
+machine from cron, with no credentials:
+
 ```
-*/30 * * * * /home/jack/Desktop/monero-review/scripts/drip.sh >> /tmp/monero-review.log 2>&1
+17 2,6,10,14,18,22 * * * /home/jack/Desktop/monero-review/scripts/drip.sh >> /tmp/monero-review.log 2>&1
 ```
-
-It needs no credentials — the `claude` CLI is already authenticated and picking
-the next PR only reads public data. Watch it with `tail /tmp/monero-review.log`.
-
-There's deliberately no `schedule:` in the workflow. GitHub never fired one for
-this repo despite the config being correct, so the drip lives in crontab where
-it actually runs.
-
-To stop it, comment out the crontab line.
 
 ## Where things are
 
