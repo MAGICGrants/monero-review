@@ -17,18 +17,27 @@ on:
           - claude-opus-5
           - claude-sonnet-5
 
-  # Every 5 minutes -- GitHub's documented floor for scheduled workflows.
-  # `* * * * *` is not possible: anything under 5 minutes is ignored.
+  # Twice an hour, off the top of the hour.
   #
-  # Cost is bounded by the concurrency group below, not by this number: only
-  # one review runs at a time and extra ticks collapse into a single pending
-  # run, so a review taking ~10 minutes caps this at roughly 6 reviews/hour
-  # however often the trigger fires.
+  # This schedule is a BACKUP AND A DIAGNOSTIC, not the clock. GitHub's
+  # scheduler dropped every tick this repo ever asked for -- see "the schedule"
+  # in the README for the measurement and the cause. Drive the drip from
+  # something that actually keeps time (an external `gh workflow run`, or
+  # scripts/drip.sh) and treat a run appearing here as a bonus.
+  #
+  # Two ticks an hour, not `*/5`: if the registration ever unsticks, a
+  # five-minute cron starts allocating 288 run records a day, nearly all of
+  # which the concurrency group cancels while still pending. Twice an hour is
+  # enough to restart a stalled queue and costs nothing when it does not fire.
+  #
+  # Do not "fix" this by moving the minute again. Every minute-of-hour has
+  # already been tried (:00/:30, :17, :07/:27/:47, and all five residues mod 5
+  # via `*/5`) and none of them fired. Congestion is not the cause.
   #
   # Stop it without editing this file:
   #   gh variable set REVIEW_PAUSED --body 1 --repo <this repo>
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "23,53 * * * *"
 
 env:
   UPSTREAM: monero-project/monero
@@ -36,8 +45,8 @@ env:
   # measured 2026-08-26, the starting queue is ~22 PRs at 1 day, ~33 at 2,
   # ~42 at 3. Start at 1 so the first drain is survivable, then widen.
   MAX_AGE_DAYS: 1
-  # PRs reviewed per tick. Back to 1 now that ticks are frequent again -- at
-  # three an hour, 2 would be a lot of subscription for one afternoon.
+  # PRs reviewed per tick. Keep at 1: the drip's rate is set by how often
+  # something dispatches this workflow, not by how much each run swallows.
   BATCH: 1
 
 # One review at a time, repo-wide. Rapid ticks collapse into a single pending

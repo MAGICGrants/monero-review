@@ -4,13 +4,18 @@
 # No GitHub credential: the claude CLI is already authenticated, and picking
 # which PR to review only reads public data. Results land in reviews/.
 #
-# This is the FALLBACK. The workflow has its own schedule: and files results as
-# issues; use this only if GitHub's scheduler turns out not to fire (an earlier
-# every-30-minutes schedule here never did). Results stay local.
+# One of two ways to drive the drip; GitHub's own scheduler is not a third --
+# see "the schedule" in the README for why it has never fired here. This one
+# needs no credential but leaves results in reviews/ locally. The alternative,
+# `gh workflow run review.yml -f pr=sweep` from cron, files them as issues.
+#
+# Run ONE of them, not both: this script skips PRs by looking at reviews/
+# filenames and CI skips them by looking at issue markers, and neither sees the
+# other's record, so both together will double-review and double-spend.
 #
 # Setup:
 #   crontab -e   # add, with absolute paths:
-#     */30 * * * * /home/jack/Desktop/monero-review/scripts/drip.sh >> /tmp/monero-review.log 2>&1
+#     23,53 * * * * /home/jack/Desktop/monero-review/scripts/drip.sh >> /tmp/monero-review.log 2>&1
 #
 # Check it is working:
 #   tail /tmp/monero-review.log
