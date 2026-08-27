@@ -1,3 +1,8 @@
 reviews/
 __pycache__/
 *.pyc
+
+# credentials -- the token lives in ~/.config, but insure against accidents
+*.token
+.env
+*.pem
