@@ -53,6 +53,10 @@ MAX_PROBES = 20
 # everything behind it.
 MAX_ATTEMPTS = 2
 
+# Pages of open PRs to consider, 100 each. Upstream runs ~300 open, so one page
+# would hide the backlog behind the most-recently-updated 100.
+MAX_PR_PAGES = 5
+
 
 def get(path, params=None):
     url = f"{API}{path}"
@@ -137,13 +141,31 @@ def main():
     batch = int(os.environ.get("BATCH", "1"))
     max_age = int(os.environ.get("MAX_AGE_DAYS", "1"))
 
-    cutoff = (datetime.datetime.now(datetime.timezone.utc)
-              - datetime.timedelta(days=max_age)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # MAX_AGE_DAYS=0 means no age limit: every open PR is eligible, so the queue
+    # chips through the backlog once recent work is done. Sorting is still
+    # most-recently-active first, so fresh PRs keep priority and old ones are
+    # only reached when nothing newer is unreviewed.
+    if max_age <= 0:
+        cutoff = ""
+    else:
+        cutoff = (datetime.datetime.now(datetime.timezone.utc)
+                  - datetime.timedelta(days=max_age)
+                  ).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    prs = get(f"/repos/{upstream}/pulls", {
-        "state": "open", "per_page": 100,
-        "sort": "updated", "direction": "desc",
-    })
+    # Paginate: upstream has far more than one page of open PRs, and a single
+    # page silently caps the queue at the 100 most-recently-updated -- which
+    # makes the backlog permanently invisible however wide MAX_AGE_DAYS is.
+    prs = []
+    for page in range(1, MAX_PR_PAGES + 1):
+        batch_of_prs = get(f"/repos/{upstream}/pulls", {
+            "state": "open", "per_page": 100, "page": page,
+            "sort": "updated", "direction": "desc",
+        })
+        if not batch_of_prs:
+            break
+        prs.extend(batch_of_prs)
+        if len(batch_of_prs) < 100:
+            break
     done, failed = review_state(repo)
 
     # Local runs record themselves as filenames; count those as done too, so a
@@ -168,7 +190,8 @@ def main():
              and p["updated_at"] > cutoff
              and pending(p)]
     queue.sort(key=lambda p: p["updated_at"], reverse=True)
-    print(f"{len(queue)} unreviewed PR(s) updated since {cutoff}",
+    scope = f"updated since {cutoff}" if cutoff else "of any age"
+    print(f"{len(queue)} unreviewed PR(s) {scope}, out of {len(prs)} open",
           file=sys.stderr)
 
     picked, probes = [], 0

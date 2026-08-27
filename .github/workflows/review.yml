@@ -44,10 +44,19 @@ env:
   # Only consider PRs touched this recently. Upstream is busier than it looks:
   # measured 2026-08-26, the starting queue is ~22 PRs at 1 day, ~33 at 2,
   # ~42 at 3. Start at 1 so the first drain is survivable, then widen.
-  MAX_AGE_DAYS: 1
+  # 0 = no age limit: every open PR is eligible, so the queue works through the
+  # backlog instead of only watching the last day. Sorting is still
+  # most-recently-active first, so fresh pushes keep priority and old PRs are
+  # reached only when nothing newer is unreviewed. Set this back to 1 once the
+  # backlog is done and you only want to track new activity.
+  MAX_AGE_DAYS: 0
   # PRs reviewed per tick. Keep at 1: the drip's rate is set by how often
   # something dispatches this workflow, not by how much each run swallows.
-  BATCH: 1
+  # Two PRs per dispatch while draining the ~250-deep backlog. They run as
+  # separate matrix legs, one at a time, each with its own timeout -- so this
+  # doubles throughput per tick without running two reviews concurrently.
+  # Drop back to 1 when the backlog is done.
+  BATCH: 2
 
 # One review at a time, repo-wide. Rapid ticks collapse into a single pending
 # run rather than stacking, and no two runs can pick the same PR concurrently.
