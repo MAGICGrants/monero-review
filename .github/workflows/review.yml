@@ -130,16 +130,54 @@ jobs:
       # mirror is needed. Blobless partial clone keeps this fast on a ~208MB
       # repo while retaining the history that merge-base needs.
       - name: Fetch upstream PR ${{ matrix.pr }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          git clone --filter=blob:none --no-tags --single-branch --branch master \
+
+          # Diff against the branch the PR actually targets, not master.
+          # Backports target release-v0.18, whose merge-base with master is
+          # years old: measured on #11115, a two-file backport, diffing against
+          # master gave a merge-base from 2022-07-15 (2402 commits behind) and
+          # a diff of 353 files / 26,286 lines -- the whole master<->release
+          # divergence. Against its real base: 2 files, 104 lines. Every
+          # backport review so far was reading that garbage.
+          BASE=$(gh api "repos/$UPSTREAM/pulls/${{ matrix.pr }}" --jq '.base.ref')
+          if [ -z "$BASE" ]; then
+            echo "::error::could not determine the base branch for PR ${{ matrix.pr }}"
+            exit 1
+          fi
+          echo "PR ${{ matrix.pr }} targets $BASE"
+
+          git clone --filter=blob:none --no-tags --single-branch --branch "$BASE" \
             "https://github.com/$UPSTREAM.git" .
+          # origin/base is a stable name the skills can use whatever the branch
+          # is called, so the review command never has to know.
           git fetch --filter=blob:none origin \
+            "+refs/heads/$BASE:refs/remotes/origin/base" \
             "+refs/pull/${{ matrix.pr }}/head:refs/heads/pr"
           git checkout --quiet pr
           # Fixed 12 chars, not --short: `select` compares against this prefix
           # and git's abbreviation length is not stable across repo states.
           echo "HEAD_SHA=$(git rev-parse HEAD | cut -c1-12)" >> "$GITHUB_ENV"
+
+          # Prove the diff is actually obtainable before spending a review on
+          # it. Roughly half of published reviews have reported being unable to
+          # compute it -- "upload-pack: not our ref" on a lazy blob fetch -- and
+          # then reconstructed the change by reading the post-image only, which
+          # defeats the method's own highest-value step (look at what was
+          # REMOVED). The model discovering that costs tens of turns and reads
+          # as a vague complaint; git saying it here costs seconds and names the
+          # object. Failing this early also keeps the attempt under
+          # MIN_REAL_ATTEMPT_SECONDS, so the PR is not charged for it.
+          if ! git diff --stat origin/base...HEAD > diffstat.txt 2> differr.txt; then
+            echo "::error::cannot compute the PR diff -- git said:"
+            cat differr.txt
+            exit 1
+          fi
+          echo "merge-base: $(git merge-base origin/base HEAD)"
+          echo "diff: $(tail -1 diffstat.txt)"
+          tail -1 diffstat.txt >> "$GITHUB_STEP_SUMMARY"
 
       # Stated intent is real leverage on a review -- but the title and body are
       # written by whoever opened the PR, so they are attacker-controlled text

@@ -24,15 +24,39 @@ if [ ! -d "$CACHE/.git" ]; then
     "https://github.com/$UPSTREAM.git" "$CACHE"
 fi
 
-echo "==> fetching PR $PR"
+# Which branch does this PR actually target? A backport targets release-v0.18,
+# and diffing one of those against master gives the whole branch divergence
+# (353 files for a 2-file change, measured) instead of the PR. Fall back to
+# master only if the API is unreachable, and say so.
+BASE=""
+if command -v jq >/dev/null 2>&1; then
+  BASE=$(curl -fsSL "https://api.github.com/repos/$UPSTREAM/pulls/$PR" 2>/dev/null \
+         | jq -r '.base.ref // empty') || BASE=""
+fi
+if [ -z "$BASE" ]; then
+  BASE=master
+  echo "!! could not read the PR's base branch; assuming $BASE. If this is a" >&2
+  echo "!! backport, the diff will be wrong -- check the review's scope." >&2
+fi
+echo "==> fetching PR $PR (base: $BASE)"
 # Detach HEAD first: git refuses to fetch into whatever branch is currently
 # checked out, and a prior run of this same PR (or a same-named branch left
 # over from anything else) leaves that branch checked out.
 git -C "$CACHE" checkout --quiet --detach
 git -C "$CACHE" fetch --filter=blob:none --quiet origin \
-  "+refs/heads/master:refs/remotes/origin/master" \
+  "+refs/heads/$BASE:refs/remotes/origin/base" \
   "+refs/pull/$PR/head:refs/heads/pr-$PR"
 git -C "$CACHE" checkout --quiet --force "pr-$PR"
+
+# Same early proof the workflow makes: if the diff cannot be computed, say so
+# now rather than paying for a review that reconstructs the change by reading
+# only the post-image.
+if ! git -C "$CACHE" diff --stat origin/base...HEAD > /dev/null 2>"$CACHE/differr.txt"; then
+  echo "!! cannot compute the diff for PR $PR -- git said:" >&2
+  cat "$CACHE/differr.txt" >&2
+  exit 1
+fi
+echo "==> diff: $(git -C "$CACHE" diff --shortstat origin/base...HEAD)"
 
 SHA=$(git -C "$CACHE" rev-parse HEAD | cut -c1-12)   # same width as the workflow
 echo "==> PR $PR is at $SHA"

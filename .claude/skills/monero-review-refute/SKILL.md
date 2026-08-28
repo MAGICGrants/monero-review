@@ -16,10 +16,13 @@ CONFIRMED.
 ## What you have
 
 - `review.md` — the findings to attack.
-- The PR diff: `git diff origin/master...HEAD` (three dots; equivalent to
-  diffing from the merge-base). Do not wrap a subcommand in `$(...)` — the Bash
-  tool refuses any command containing it, whatever the allowlist says. Resolve
-  the value in a separate call and paste it in.
+- The PR diff: `git diff origin/base...HEAD` (three dots; equivalent to
+  diffing from the merge-base). `origin/base` is the branch this PR actually
+  targets, set up by the harness — not `origin/master`, which for a backport
+  would give the whole branch divergence instead of the change. Do not wrap a
+  subcommand in `$(...)` — the Bash tool refuses any command containing it,
+  whatever the allowlist says. Resolve the value in a separate call and paste
+  it in.
 - `PR_CONTEXT.md` — the PR title and description, if present.
 - `references/` in the `monero-security-review` skill directory:
   `refutations.md` (the recurring reasons findings here turn out to be

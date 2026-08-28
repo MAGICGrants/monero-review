@@ -16,15 +16,21 @@ of refutation work. An inflated report is worse than an empty one.
 ## Scope
 
 ```
-git diff origin/master...HEAD
+git diff origin/base...HEAD
 ```
 
-Three dots, and no `$(...)`. This is exactly equivalent to
-`git diff $(git merge-base origin/master HEAD) HEAD` — `A...B` *means* "from
-the merge-base of A and B to B" — but the substitution form cannot be run at
-all: the Bash tool refuses any command containing `$(...)`, whatever the
-allowlist says. That applies to every command you issue here, so never wrap a
-subcommand in `$(...)`; resolve it in a separate call and paste the value in.
+`origin/base` is the branch this PR actually targets, set up for you by the
+harness. Use it, not `origin/master`: a backport targets `release-v0.18`, whose
+merge-base with master is years old, and diffing such a PR against master
+yields the entire branch divergence instead of the change (measured on one
+two-file backport: 353 files and 26,286 lines against master, 2 files and 104
+lines against its real base).
+
+Three dots, and no `$(...)`. `A...B` *means* "from the merge-base of A and B to
+B", so the substitution form is redundant — and it cannot be run in any case:
+the Bash tool refuses any command containing `$(...)`, whatever the allowlist
+says. That applies to every command you issue here, so never wrap a subcommand
+in `$(...)`; resolve it in a separate call and paste the value in.
 
 Read `PR_CONTEXT.md` first — the PR title and description. Stated intent is
 leverage: "does this do what it claims, and what *else* does it do" is a much
