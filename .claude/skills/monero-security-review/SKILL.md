@@ -1,7 +1,7 @@
 ---
 name: monero-security-review
 description: Security review of the changes in a Monero pull request.
-allowed-tools: Read, Grep, Glob, Write, Edit, Skill, Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git blame:*), Bash(git merge-base:*), Bash(readtags:*), Bash(cscope:*)
+allowed-tools: Read, Grep, Glob, Write, Edit, Skill, Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git blame:*), Bash(git merge-base:*), Bash(git grep:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git cat-file:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git describe:*), Bash(git shortlog:*), Bash(git name-rev:*), Bash(git --no-pager:*), Bash(readtags:*), Bash(cscope:*), Bash(rg:*), Bash(grep:*), Bash(sed:*), Bash(awk:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(sort:*), Bash(uniq:*), Bash(cut:*), Bash(tr:*), Bash(nl:*), Bash(comm:*), Bash(diff:*), Bash(find:*), Bash(ls:*), Bash(cat:*), Bash(file:*), Bash(stat:*), Bash(xxd:*), Bash(od:*), Bash(strings:*), Bash(basename:*), Bash(dirname:*), Bash(jq:*)
 ---
 
 You are reviewing one pull request against `monero-project/monero` for
@@ -31,26 +31,36 @@ B", so the substitution form is redundant — and it cannot be run in any case:
 the Bash tool refuses any command containing `$(...)`, whatever the allowlist
 says.
 
-Issue **one plain command per call**. These forms are all refused, and each
-refusal costs you a turn for nothing:
+You have a wide set of read-only tools: git's inspection subcommands (`diff`,
+`log`, `show`, `blame`, `grep`, `rev-parse`, `rev-list`, `cat-file`, `ls-files`,
+`ls-tree`, `describe`, `shortlog`), the symbol index (`readtags`, `cscope`), and
+the usual text utilities (`rg`, `grep`, `sed`, `awk`, `head`, `tail`, `wc`,
+`sort`, `uniq`, `cut`, `tr`, `nl`, `comm`, `diff`, `find`, `ls`, `cat`, `file`,
+`stat`, `xxd`, `od`, `strings`, `jq`).
+
+**Pipes work.** `git diff origin/base...HEAD | wc -l`, `sed -n '100,200p' f.cpp
+| grep -n free`, `cscope -d -L3 fn | head -40` are all fine — use them freely.
+
+Three shell forms are refused no matter what, and each refusal costs you a turn
+for nothing:
 
 | refused | use instead |
 | --- | --- |
-| `$(...)` command substitution | resolve it in a separate call, paste the value |
-| `git --no-pager diff ...` | `git diff ...` — there is no pager here |
-| `git diff ... > /tmp/f` | let the output come back; read it |
-| `git diff ... > f; wc -l f` | `git diff --stat ...` for sizes |
-| `cmd1; cmd2` or `cmd1 && cmd2` | two separate calls |
+| `cmd > file` — any redirect to a file | pipe it: `cmd \| wc -l`, or just read the output |
+| `cmd1 && cmd2`, `cmd1; cmd2` | two separate calls |
+| `$(...)` command substitution | resolve it in a separate call, paste the value in |
+
+The redirect one matters most on a large diff: do not try to write per-file
+diffs out and measure them. `git diff --stat origin/base...HEAD` gives the
+shape, `git diff origin/base...HEAD -- <path>` gives one path's changes, and
+`| wc -l` sizes anything you need sized.
 
 Prefer `Edit` over rewriting `review.md` with `Write` when adding a finding to
 a report you have already started.
 
-**On a large diff, do not try to write it to files first.** Redirects are
-refused, so a run that reaches for them spends its whole budget being denied
-and produces nothing — measured: 21 refusals, 18 of them redirects, 12 turns,
-no report. Take the diff a path at a time instead: `git diff --stat
-origin/base...HEAD` for the shape, then `git diff origin/base...HEAD -- <path>`
-per file or directory, reading each result as it comes back.
+A run that reaches for redirects on a large diff spends its whole budget being
+refused and produces nothing — measured: 21 refusals, 18 of them redirects, 12
+turns, no report. Take the diff a path at a time instead.
 
 Read `PR_CONTEXT.md` first — the PR title and description. Stated intent is
 leverage: "does this do what it claims, and what *else* does it do" is a much

@@ -98,7 +98,7 @@ cp -r "$HERE/.claude" "$CACHE/.claude"
 # are absent -- `sudo apt install universal-ctags cscope` to enable.
 bash "$HERE/scripts/build_index.sh" "$CACHE"
 
-TOOLS="Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*),Bash(git merge-base:*),Bash(readtags:*),Bash(cscope:*)"
+TOOLS="Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*),Bash(git merge-base:*),Bash(git grep:*),Bash(git rev-parse:*),Bash(git rev-list:*),Bash(git cat-file:*),Bash(git ls-files:*),Bash(git ls-tree:*),Bash(git describe:*),Bash(git shortlog:*),Bash(git name-rev:*),Bash(git --no-pager:*),Bash(readtags:*),Bash(cscope:*),Bash(rg:*),Bash(grep:*),Bash(sed:*),Bash(awk:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(uniq:*),Bash(cut:*),Bash(tr:*),Bash(nl:*),Bash(comm:*),Bash(diff:*),Bash(find:*),Bash(ls:*),Bash(cat:*),Bash(file:*),Bash(stat:*),Bash(xxd:*),Bash(od:*),Bash(strings:*),Bash(basename:*),Bash(dirname:*),Bash(jq:*)"
 
 rm -f "$CACHE/review.md" "$CACHE/exec.json" "$CACHE/exec-refute.json"
 echo "==> reviewing with $MODEL"
