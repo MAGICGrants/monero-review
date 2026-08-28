@@ -111,10 +111,11 @@ jobs:
     needs: select
     if: needs.select.outputs.prs != '' && needs.select.outputs.prs != '[]'
     runs-on: ubuntu-latest
-    # Raised alongside --max-turns 100: a large diff that needs 100 turns needs
+    # Raised alongside --max-turns 200: a large diff that needs 200 turns needs
     # the wall clock to spend them in, or the turn limit is just swapped for a
-    # timeout. Per matrix leg, so BATCH=2 gets this each.
-    timeout-minutes: 75
+    # timeout. Two hours covers both passes at the raised turn budget. Per
+    # matrix leg, so BATCH=2 gets this each.
+    timeout-minutes: 120
     permissions:
       contents: read
       issues: write
@@ -180,7 +181,7 @@ jobs:
           prompt: "/monero-security-review"
           claude_args: |
             --model ${{ inputs.model || 'claude-sonnet-5' }}
-            --max-turns 100
+            --max-turns 200
             --allowedTools "Read,Grep,Glob,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*),Bash(git merge-base:*),Bash(readtags:*),Bash(cscope:*)"
 
       # Only verify if the first pass actually found something. Most PRs
@@ -203,7 +204,7 @@ jobs:
       # Adversarial second pass: attack every finding, default verdict REFUTED.
       # Same capabilities as the first pass -- still nothing outward-facing.
       #
-      # 100 turns, matching pass 1. Pass 1 only has to notice something
+      # 200 turns, matching pass 1. Pass 1 only has to notice something
       # suspicious; this pass has to establish that a finding is unreachable,
       # which means chasing every caller through cscope and readtags until the
       # claim either holds or dies. Running out here is also the more expensive
@@ -218,7 +219,7 @@ jobs:
           prompt: "/monero-review-refute"
           claude_args: |
             --model ${{ inputs.model || 'claude-sonnet-5' }}
-            --max-turns 100
+            --max-turns 200
             --allowedTools "Read,Grep,Glob,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*),Bash(git merge-base:*),Bash(readtags:*),Bash(cscope:*)"
 
       # Footer with cost/tokens/duration, summed across both passes. Generated
