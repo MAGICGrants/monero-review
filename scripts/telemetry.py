@@ -118,8 +118,24 @@ def main():
         except ValueError:
             pass
 
-    paths = [p.strip() for p in os.environ.get("EXEC_FILE", "").split(",")
-             if p.strip()]
+    # De-duplicate: claude-code-action wrote both passes to one path, so an
+    # unguarded list could contain the same file twice and merge() would sum a
+    # pass with itself -- inflating turns, duration and cost on every two-pass
+    # footer. The workflow now snapshots pass 1, but a footer that silently
+    # doubles its numbers is bad enough to guard in both places.
+    seen = set()
+    paths = []
+    for raw in os.environ.get("EXEC_FILE", "").split(","):
+        path = raw.strip()
+        if not path:
+            continue
+        key = os.path.realpath(path)
+        if key in seen:
+            print(f"telemetry: ignoring duplicate execution log {path}",
+                  file=sys.stderr)
+            continue
+        seen.add(key)
+        paths.append(path)
     results = []
     for path in paths:
         if not os.path.exists(path):

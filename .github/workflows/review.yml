@@ -274,6 +274,26 @@ jobs:
       # a fifth copy. Five hand-synced copies is the same drift that let the
       # verification gate and labels.py disagree; change them together.
 
+      # claude-code-action writes both passes' logs to the SAME path
+      # (/home/runner/work/_temp/claude-execution-output.json), so the
+      # refutation pass overwrites pass 1's. Observed on run 67: EXEC_FILE held
+      # that one path twice, `denials` reported "none recorded" for a pass 1
+      # that had denials, and telemetry summed the second pass with itself --
+      # which is why a two-pass footer read "86 turns over 2 passes". Copy it
+      # aside while it still exists.
+      - name: Keep pass 1's execution log
+        if: always()
+        env:
+          SRC: ${{ steps.claude.outputs.execution_file }}
+        run: |
+          if [ -n "${SRC:-}" ] && [ -f "$SRC" ]; then
+            cp "$SRC" exec-pass1.json
+            echo "PASS1_EXEC=$PWD/exec-pass1.json" >> "$GITHUB_ENV"
+            echo "kept $(wc -c < exec-pass1.json) bytes of pass 1's log"
+          else
+            echo "pass 1 produced no execution log"
+          fi
+
       # claude-code-action can decline to run and still report success. It
       # refuses when this workflow file differs from the copy on the default
       # branch ("Skipping action due to workflow validation") and exits 0 --
@@ -351,7 +371,7 @@ jobs:
       - name: Append run telemetry
         if: always()
         env:
-          EXEC_FILE: ${{ steps.claude.outputs.execution_file }},${{ steps.refute.outputs.execution_file }}
+          EXEC_FILE: ${{ env.PASS1_EXEC }},${{ steps.refute.outputs.execution_file }}
           MODEL: ${{ inputs.model || 'claude-sonnet-5' }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -370,7 +390,7 @@ jobs:
       - name: Refused tool calls
         if: always()
         env:
-          EXEC_FILE: ${{ steps.claude.outputs.execution_file }},${{ steps.refute.outputs.execution_file }}
+          EXEC_FILE: ${{ env.PASS1_EXEC }},${{ steps.refute.outputs.execution_file }}
         run: |
           [ -f .harness/scripts/denials.py ] || exit 0
           python3 .harness/scripts/denials.py | tee -a "$GITHUB_STEP_SUMMARY"
@@ -611,6 +631,6 @@ jobs:
         with:
           name: exec-${{ matrix.pr }}
           path: |
-            ${{ steps.claude.outputs.execution_file }}
+            exec-pass1.json
             ${{ steps.refute.outputs.execution_file }}
           if-no-files-found: ignore

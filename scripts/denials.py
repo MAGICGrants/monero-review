@@ -70,8 +70,21 @@ def describe(entry):
 
 
 def main():
-    paths = [p.strip() for p in os.environ.get("EXEC_FILE", "").split(",")
-             if p.strip() and os.path.exists(p.strip())]
+    # De-duplicate by real path: both passes' logs were written to one path
+    # for a while, and counting that file twice would report 24 refused calls
+    # where there were 12. The genuine doubling -- a blocked command retried
+    # with the sandbox disabled -- is kept, since that is real behaviour worth
+    # seeing.
+    seen = set()
+    paths = []
+    for raw in os.environ.get("EXEC_FILE", "").split(","):
+        path = raw.strip()
+        if not path or not os.path.exists(path):
+            continue
+        key = os.path.realpath(path)
+        if key not in seen:
+            seen.add(key)
+            paths.append(path)
     if not paths:
         return
     seen = collections.Counter()
