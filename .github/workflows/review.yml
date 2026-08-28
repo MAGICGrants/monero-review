@@ -154,7 +154,14 @@ jobs:
         with:
           path: .harness
           persist-credentials: false
-      - run: cp -r .harness/.claude .claude
+      # `cp -r src dst` copies INTO dst when dst already exists. Upstream has
+      # no .claude/ today, but if it ever ships one this would land the skill at
+      # .claude/.claude, where it does not load -- and the review would still
+      # run, produce something, and publish it as if a skill had guided it.
+      # Replace the directory outright, as review-local.sh already does.
+      - run: |
+          rm -rf .claude
+          cp -r .harness/.claude .claude
 
       # Precise cross-reference beats grep for "who calls this", which is the
       # load-bearing claim in every finding. ctags/cscope parse source text
@@ -189,12 +196,26 @@ jobs:
       - name: Anything to verify?
         id: triage
         run: |
-          # Match a severity-tagged finding heading, not the section header.
-          # Pass 1 sometimes writes "## Findings" followed by "None." despite
-          # being told to omit the section, and grepping the header alone paid
-          # for a whole verification pass with nothing to verify.
-          if [ -s review.md ] && \
-             grep -Eq '^###[[:space:]]*\[(CRITICAL|HIGH|MEDIUM|LOW)' review.md; then
+          # Ask labels.py, the one place that knows what a severity heading
+          # looks like. This gate used to carry its own regex and the two
+          # drifted: the regex here was case-sensitive and rejected a space
+          # after `[`, where labels.py is neither. So "### [ Medium / ... ]"
+          # skipped verification, then got published WITH a severity label
+          # under a title indistinguishable from a verified review -- and the
+          # issue is the dedup marker, so the PR was never looked at again.
+          # That is what the publish guard below exists to prevent, reached by
+          # a route the guard cannot see. One reader, no drift.
+          #
+          # labels.py also ignores findings already marked REFUTED, which is
+          # the wanted behaviour here: pass 1 has nothing refuted yet, and a
+          # re-run over an already-verified file must not pay for a second
+          # verification pass.
+          #
+          # Deliberately no `|| true`: if labels.py is missing or broken the
+          # harness checkout is broken, which means the review ran without its
+          # skill. Fail the job loudly rather than quietly skip verification.
+          sevs=$(python3 .harness/scripts/labels.py review.md)
+          if [ -s review.md ] && [ -n "$sevs" ]; then
             echo "verify=true" >> "$GITHUB_OUTPUT"
             echo "first pass produced findings, running verification"
           else
@@ -235,14 +256,63 @@ jobs:
           [ -f .harness/scripts/telemetry.py ] || exit 0
           python3 .harness/scripts/telemetry.py
 
+      # Whether the adversarial pass actually ran is part of the deliverable,
+      # so the workflow says so -- like the telemetry above, and for the same
+      # reason: a claim the model cannot make about itself. Of the first 51
+      # published reviews, only two of the seven carrying findings showed any
+      # trace of pass 2 having run, so a reader had no way to tell a verified
+      # finding from a rubber-stamped one. Appended after the telemetry footer
+      # so both sit in one block under one rule.
+      #
+      # This step is also the single authority on whether the deliverable is
+      # complete: `Publish findings` below reads its `state` rather than
+      # re-deriving one. State comes from review.md itself, NOT from the triage
+      # step, because pass 1 can exhaust its turn budget *after* writing
+      # findings -- the job fails, triage never runs, and reading triage's
+      # (empty) output would call that file "no findings" and publish
+      # unverified work under a complete-looking title. Same defect as a
+      # drifted regex, through a different door.
+      - name: Verification status
+        id: verified
+        if: always()
+        env:
+          VERIFY_OUTCOME: ${{ steps.refute.outcome }}
+        run: |
+          set -euo pipefail
+          if [ ! -s review.md ]; then
+            echo "state=none" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # If we cannot read what is in the file, assume the worst: an
+          # unreadable report must not publish as a verified one.
+          if ! sevs=$(python3 .harness/scripts/labels.py review.md); then
+            echo "labels.py unavailable -- treating findings as unverified" >&2
+            sevs=unknown
+          fi
+
+          if [ -z "$sevs" ]; then
+            state=none
+            note="first pass reported no findings, so there was nothing to attack."
+          elif [ "${VERIFY_OUTCOME:-}" = "success" ]; then
+            state=verified
+            note="every finding above was attacked by an independent adversarial pass, default verdict REFUTED. Refuted candidates are kept in the report."
+          else
+            state=unverified
+            note="**NOT VERIFIED** — the adversarial pass did not complete (\`${VERIFY_OUTCOME:-did not run}\`). Expect false positives."
+          fi
+
+          echo "state=$state" >> "$GITHUB_OUTPUT"
+          echo "verification state: $state"
+          printf '<sub>Verification: %s</sub>\n' "$note" >> review.md
+
       # An issue is the dedup marker, so it is only written on success --
       # a rate-limited or timed-out run leaves no marker and gets retried.
       - name: Publish findings
         if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERIFY_EXPECTED: ${{ steps.triage.outputs.verify }}
-          VERIFY_OUTCOME: ${{ steps.refute.outcome }}
+          VERIFY_STATE: ${{ steps.verified.outputs.state }}
         run: |
           set -euo pipefail
           # HEAD_SHA is unset if the fetch step never ran; always() gets us here
@@ -259,15 +329,18 @@ jobs:
           # file unverified findings under a title indistinguishable from a
           # complete review -- and the issue is the dedup marker, so the PR would
           # never be looked at again. Surface the work, record nothing, retry.
-          if [ "${VERIFY_EXPECTED:-}" = "true" ] && [ "${VERIFY_OUTCOME:-}" != "success" ]; then
+          #
+          # Defaulting an absent state to `unverified` is deliberate: if the
+          # step that decides never reported, we do not know the findings were
+          # checked, and the safe direction is to file nothing and retry.
+          if [ "${VERIFY_STATE:-unverified}" = "unverified" ]; then
             {
               echo "## $UPSTREAM#${{ matrix.pr }} @ \`$SHA\` — UNVERIFIED"
               echo
               echo "Pass 1 produced findings but the verification pass did not"
-              echo "complete (\`$VERIFY_OUTCOME\`). These have **not** been"
-              echo "adversarially checked and are expected to contain false"
-              echo "positives. No issue was filed, so this PR stays in the queue"
-              echo "and will be reviewed again."
+              echo "complete. These have **not** been adversarially checked and"
+              echo "are expected to contain false positives. No issue was filed,"
+              echo "so this PR stays in the queue and will be reviewed again."
               echo
               cat review.md
             } >> "$GITHUB_STEP_SUMMARY"
