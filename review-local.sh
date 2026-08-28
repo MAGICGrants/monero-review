@@ -67,7 +67,14 @@ fi
 
 # Adversarial second pass, only if the first found something to attack.
 EXEC_FILES="$CACHE/exec.json"
-if grep -Eq '^###[[:space:]]*\[(CRITICAL|HIGH|MEDIUM|LOW)' "$CACHE/review.md"; then
+# Whether the adversarial pass ran is part of the deliverable, so the script
+# states it rather than leaving a reader to infer it. Same wording as the
+# workflow's stamp, so a local review and a CI review read alike.
+VERIFIED="**NOT VERIFIED** — the adversarial pass did not complete. Expect false positives."
+# labels.py is the one place that knows what a severity heading looks like;
+# asking it here keeps this gate from drifting away from the workflow's, which
+# is how unverified findings got published once already.
+if [ -n "$(python3 "$HERE/scripts/labels.py" "$CACHE/review.md")" ]; then
   echo "==> findings present, verifying"
   # Tolerate failure here: pass 1's work still has value, but it must be
   # labelled, because unverified findings are mostly false positives.
@@ -75,6 +82,7 @@ if grep -Eq '^###[[:space:]]*\[(CRITICAL|HIGH|MEDIUM|LOW)' "$CACHE/review.md"; t
          --model "$MODEL" --output-format json --allowedTools "$TOOLS" \
          > exec-refute.json ); then
     EXEC_FILES="$EXEC_FILES,$CACHE/exec-refute.json"
+    VERIFIED="every finding above was attacked by an independent adversarial pass, default verdict REFUTED. Refuted candidates are kept in the report."
   else
     echo "!! verification pass failed -- findings are UNVERIFIED" >&2
     printf '> **UNVERIFIED** — the adversarial verification pass did not\n> complete. Expect false positives.\n\n%s\n' \
@@ -83,11 +91,13 @@ if grep -Eq '^###[[:space:]]*\[(CRITICAL|HIGH|MEDIUM|LOW)' "$CACHE/review.md"; t
   fi
 else
   echo "==> no findings, skipping verification"
+  VERIFIED="first pass reported no findings, so there was nothing to attack."
 fi
 
 # Same footer the workflow appends: model, wall clock, turns, tokens, cost.
 EXEC_FILE="$EXEC_FILES" REVIEW_MD="$CACHE/review.md" T0="$T0" MODEL="$MODEL" \
   python3 "$HERE/scripts/telemetry.py"
+printf '<sub>Verification: %s</sub>\n' "$VERIFIED" >> "$CACHE/review.md"
 
 mkdir -p "$HERE/reviews"
 OUT="$HERE/reviews/pr-$PR-$SHA.md"
