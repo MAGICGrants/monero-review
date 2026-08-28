@@ -581,3 +581,20 @@ jobs:
           name: review-${{ matrix.pr }}
           path: review.md
           if-no-files-found: ignore
+
+      # The execution files hold the transcript and the per-call permission
+      # denials. The job log reports only `permission_denials_count`, which is
+      # not enough to act on: run 65 showed 10 denials / 14 turns / no
+      # review.md, while the identical PR, allowlist and diff run outside
+      # Actions gave 11 denials / 90 turns / a complete report. The denial
+      # counts match, so the denials are not the difference -- the model
+      # quitting after ~14 turns is, and the only record of why is in here.
+      # Keep them so the next failure can be read rather than guessed at.
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: exec-${{ matrix.pr }}
+          path: |
+            ${{ steps.claude.outputs.execution_file }}
+            ${{ steps.refute.outputs.execution_file }}
+          if-no-files-found: ignore
