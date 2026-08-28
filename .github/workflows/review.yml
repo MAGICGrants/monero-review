@@ -393,7 +393,19 @@ jobs:
             note="first pass reported no findings, so there was nothing to attack."
           elif [ "${VERIFY_OUTCOME:-}" = "success" ] && [ -n "${REFUTE_EXEC:-}" ]; then
             state=verified
-            note="every finding above was attacked by an independent adversarial pass, default verdict REFUTED. Refuted candidates are kept in the report."
+            # Say only what is provable. A successful step with an execution
+            # file proves the adversarial pass *ran*; it does not prove it did
+            # the work. The refutation skill requires a per-finding
+            # "**Verification:**" note and keeps refuted candidates in a
+            # "## Refuted" section -- across the first 51 reviews neither
+            # appeared even once, so their presence is the only evidence a
+            # reader has, and their absence has to be said out loud rather
+            # than papered over by a confident stamp.
+            if grep -q '\*\*Verification' review.md; then
+              note="an independent adversarial pass ran and recorded per-finding verification notes; surviving findings are those it could not refute."
+            else
+              note="an independent adversarial pass ran, but recorded **no per-finding verification notes**, so there is no evidence of what it checked. Treat these findings as first-pass quality."
+            fi
           else
             state=unverified
             if [ "${VERIFY_OUTCOME:-}" = "success" ]; then

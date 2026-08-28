@@ -264,6 +264,10 @@ and why. This is what makes an empty report trustworthy.
 If nothing meets the bar, omit the Findings section, say so plainly in the
 summary, and make "What was checked" carry the weight.
 
+Do not write a `Verification:` footer, or any other claim about whether an
+adversarial pass ran. The harness appends that line itself, from what actually
+happened — a claim you make about it will contradict the record and has done.
+
 Do not report style, naming, or performance without a denial-of-service
 argument. Do not pad. Do not report theoretical issues you cannot trace to an
 input. Prefer zero findings over speculation.

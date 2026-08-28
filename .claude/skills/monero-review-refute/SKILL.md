@@ -120,4 +120,18 @@ next push.
 If every finding is refuted, say so plainly at the top of the summary: the PR
 had no confirmed security findings, and here is what was considered.
 
+### The verification notes are the deliverable
+
+A reader cannot tell a verified finding from a rubber-stamped one except by
+what you write down. So for every surviving finding the `**Verification:**`
+line is mandatory, and every candidate you killed goes under
+`## Refuted during verification` with the guard's `file:line`. Across the
+first 51 reviews of this harness, neither appeared even once — the harness now
+states plainly, on the published issue, when they are missing, so an omission
+is visible rather than invisible.
+
+Do not write a `Verification:` footer or any other claim about whether an
+adversarial pass ran: the harness appends that from what actually happened,
+and a claim of your own will contradict it.
+
 Write only `review.md`. Create no other files.
