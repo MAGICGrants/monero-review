@@ -202,6 +202,14 @@ jobs:
 
       # Adversarial second pass: attack every finding, default verdict REFUTED.
       # Same capabilities as the first pass -- still nothing outward-facing.
+      #
+      # 100 turns, matching pass 1. Pass 1 only has to notice something
+      # suspicious; this pass has to establish that a finding is unreachable,
+      # which means chasing every caller through cscope and readtags until the
+      # claim either holds or dies. Running out here is also the more expensive
+      # failure: publish treats an incomplete verification as no review at all,
+      # files no issue, and the elapsed time counts a real attempt -- so
+      # MAX_ATTEMPTS of them retire the PR from the queue for good.
       - id: refute
         if: steps.triage.outputs.verify == 'true'
         uses: anthropics/claude-code-action@v1
@@ -210,7 +218,7 @@ jobs:
           prompt: "/monero-review-refute"
           claude_args: |
             --model ${{ inputs.model || 'claude-sonnet-5' }}
-            --max-turns 40
+            --max-turns 100
             --allowedTools "Read,Grep,Glob,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*),Bash(git merge-base:*),Bash(readtags:*),Bash(cscope:*)"
 
       # Footer with cost/tokens/duration, summed across both passes. Generated
