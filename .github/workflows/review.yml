@@ -173,6 +173,14 @@ jobs:
           if ! git diff --stat origin/base...HEAD > diffstat.txt 2> differr.txt; then
             echo "::error::cannot compute the PR diff -- git said:"
             cat differr.txt
+            # This failure is deterministic and belongs to this PR: the same
+            # objects will be missing on every retry. It also happens in
+            # seconds, so the elapsed-time heuristic in `Record failed attempt`
+            # would read it as an account-level blip and decline to count it --
+            # leaving this PR the newest unreviewed item on every tick, forever,
+            # burning one of BATCH's slots each time. Say explicitly that it is
+            # ours to be charged for.
+            echo "PR_FAULT=diff unavailable: $(head -1 differr.txt)" >> "$GITHUB_ENV"
             exit 1
           fi
           echo "merge-base: $(git merge-base origin/base HEAD)"
@@ -498,11 +506,26 @@ jobs:
         run: |
           set -euo pipefail
           started=${T0:-0}
+          elapsed=0
+          [ "$started" = "0" ] || elapsed=$(( $(date +%s) - started ))
+
+          # A step that identified the fault as this PR's own bypasses the
+          # timing heuristic entirely: it is deterministic, so a retry cannot
+          # help, and not counting it would block the queue behind this PR.
+          if [ -n "${PR_FAULT:-}" ]; then
+            echo "PR-specific fault after ${elapsed}s: $PR_FAULT"
+            gh label create review-failed --force >/dev/null 2>&1 || true
+            gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "Review FAILED: $UPSTREAM#${{ matrix.pr }} @ $HEAD_SHA" \
+              --label review-failed \
+              --body "$PR_FAULT. Deterministic for this PR, so a retry will not help. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            exit 0
+          fi
+
           if [ "$started" = "0" ]; then
             echo "failed before the review started -- not counting an attempt"
             exit 0
           fi
-          elapsed=$(( $(date +%s) - started ))
           if [ "$elapsed" -lt "$MIN_REAL_ATTEMPT_SECONDS" ]; then
             echo "review failed after ${elapsed}s -- too fast to be this PR's"
             echo "fault (usage limit, auth, or infrastructure). Not counting an"
