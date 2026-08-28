@@ -89,10 +89,19 @@ def main():
           f"{len(with_findings)} with findings, "
           f"{len(reviews) - len(with_findings)} clean")
     if failures:
-        counts = collections.Counter(
-            re.search(r"#(\d+)", f["title"]).group(1) for f in failures
-            if re.search(r"#(\d+)", f["title"]))
-        stuck = [pr for pr, n in counts.items() if n >= 2]
+        # Per SHA, not per PR: select_prs.py gives up on a SHA after
+        # MAX_ATTEMPTS, so a PR that failed once at each of two different head
+        # SHAs is still in the queue. Counting per PR reported it as abandoned.
+        by_sha = collections.Counter()
+        sha_pr = {}
+        for f in failures:
+            pr = re.search(r"#(\d+)", f["title"])
+            for sha in re.findall(r"\b[0-9a-f]{12}\b", f["title"]):
+                by_sha[sha] += 1
+                if pr:
+                    sha_pr[sha] = pr.group(1)
+        stuck = sorted({sha_pr.get(sha, sha) for sha, n in by_sha.items()
+                        if n >= 2})
         print(f"  {len(failures)} failed attempt(s)"
               + (f", gave up on PR(s) {', '.join(stuck)}" if stuck else ""))
 

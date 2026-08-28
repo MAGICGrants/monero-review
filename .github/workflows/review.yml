@@ -60,6 +60,14 @@ env:
 
 # One review at a time, repo-wide. Rapid ticks collapse into a single pending
 # run rather than stacking, and no two runs can pick the same PR concurrently.
+#
+# Note the shape of that collapse: GitHub keeps exactly ONE pending run per
+# group. `cancel-in-progress: false` protects the run that is executing, not
+# the queue behind it -- a third dispatch cancels the second while the first is
+# still going. So two `gh workflow run` calls in quick succession while a review
+# is in flight lose the first one silently (observed: run 57, cancelled 7s in,
+# and PR 10819 went unreviewed as a result). Dispatch one PR at a time and wait,
+# or pass several to one dispatch and let the matrix carry them.
 concurrency:
   group: monero-review
   cancel-in-progress: false
@@ -260,6 +268,11 @@ jobs:
             --model ${{ inputs.model || 'claude-sonnet-5' }}
             --max-turns 200
             --allowedTools "Read,Grep,Glob,Write,Edit,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*),Bash(git merge-base:*),Bash(readtags:*),Bash(cscope:*)"
+
+      # NB: this list is the one that BINDS. The `allowed-tools:` line in
+      # each skill's frontmatter is documentation, and review-local.sh carries
+      # a fifth copy. Five hand-synced copies is the same drift that let the
+      # verification gate and labels.py disagree; change them together.
 
       # claude-code-action can decline to run and still report success. It
       # refuses when this workflow file differs from the copy on the default

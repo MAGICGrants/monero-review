@@ -131,6 +131,11 @@ fi
 
 # `-f pr=sweep` means "take the next unreviewed PR from the queue". The workflow
 # does its own dedup, so a tick with nothing to do is cheap and files nothing.
+#
+# One dispatch per run, and never two in quick succession: GitHub holds exactly
+# one PENDING run per concurrency group, so if a review is already executing, a
+# second dispatch queues and a third cancels the second. Reviewing two specific
+# PRs means two dispatches spaced apart, or one sweep that picks both.
 if out=$(GH_TOKEN="$token" gh workflow run "$WORKFLOW" --repo "$REPO" \
            -f pr=sweep -f model="$MODEL" 2>&1); then
   log "dispatched sweep to $REPO on $MODEL"
