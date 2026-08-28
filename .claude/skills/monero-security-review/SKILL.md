@@ -16,8 +16,15 @@ of refutation work. An inflated report is worse than an empty one.
 ## Scope
 
 ```
-git diff $(git merge-base origin/master HEAD)...HEAD
+git diff origin/master...HEAD
 ```
+
+Three dots, and no `$(...)`. This is exactly equivalent to
+`git diff $(git merge-base origin/master HEAD) HEAD` — `A...B` *means* "from
+the merge-base of A and B to B" — but the substitution form cannot be run at
+all: the Bash tool refuses any command containing `$(...)`, whatever the
+allowlist says. That applies to every command you issue here, so never wrap a
+subcommand in `$(...)`; resolve it in a separate call and paste the value in.
 
 Read `PR_CONTEXT.md` first — the PR title and description. Stated intent is
 leverage: "does this do what it claims, and what *else* does it do" is a much

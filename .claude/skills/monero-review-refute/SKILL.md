@@ -16,7 +16,10 @@ CONFIRMED.
 ## What you have
 
 - `review.md` — the findings to attack.
-- The PR diff: `git diff $(git merge-base origin/master HEAD)...HEAD`
+- The PR diff: `git diff origin/master...HEAD` (three dots; equivalent to
+  diffing from the merge-base). Do not wrap a subcommand in `$(...)` — the Bash
+  tool refuses any command containing it, whatever the allowlist says. Resolve
+  the value in a separate call and paste it in.
 - `PR_CONTEXT.md` — the PR title and description, if present.
 - `references/` in the `monero-security-review` skill directory:
   `refutations.md` (the recurring reasons findings here turn out to be
