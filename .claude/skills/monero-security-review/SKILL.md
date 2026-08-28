@@ -1,7 +1,7 @@
 ---
 name: monero-security-review
 description: Security review of the changes in a Monero pull request.
-allowed-tools: Read, Grep, Glob, Write, Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git blame:*), Bash(git merge-base:*), Bash(readtags:*), Bash(cscope:*)
+allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git blame:*), Bash(git merge-base:*), Bash(readtags:*), Bash(cscope:*)
 ---
 
 You are reviewing one pull request against `monero-project/monero` for
@@ -29,8 +29,20 @@ lines against its real base).
 Three dots, and no `$(...)`. `A...B` *means* "from the merge-base of A and B to
 B", so the substitution form is redundant — and it cannot be run in any case:
 the Bash tool refuses any command containing `$(...)`, whatever the allowlist
-says. That applies to every command you issue here, so never wrap a subcommand
-in `$(...)`; resolve it in a separate call and paste the value in.
+says.
+
+Issue **one plain command per call**. These forms are all refused, and each
+refusal costs you a turn for nothing:
+
+| refused | use instead |
+| --- | --- |
+| `$(...)` command substitution | resolve it in a separate call, paste the value |
+| `git --no-pager diff ...` | `git diff ...` — there is no pager here |
+| `git diff ... > /tmp/f` | let the output come back; read it |
+| `cmd1; cmd2` or `cmd1 && cmd2` | two separate calls |
+
+Prefer `Edit` over rewriting `review.md` with `Write` when adding a finding to
+a report you have already started.
 
 Read `PR_CONTEXT.md` first — the PR title and description. Stated intent is
 leverage: "does this do what it claims, and what *else* does it do" is a much

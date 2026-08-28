@@ -259,7 +259,7 @@ jobs:
           claude_args: |
             --model ${{ inputs.model || 'claude-sonnet-5' }}
             --max-turns 200
-            --allowedTools "Read,Grep,Glob,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*),Bash(git merge-base:*),Bash(readtags:*),Bash(cscope:*)"
+            --allowedTools "Read,Grep,Glob,Write,Edit,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*),Bash(git merge-base:*),Bash(readtags:*),Bash(cscope:*)"
 
       # claude-code-action can decline to run and still report success. It
       # refuses when this workflow file differs from the copy on the default
@@ -331,7 +331,7 @@ jobs:
           claude_args: |
             --model ${{ inputs.model || 'claude-sonnet-5' }}
             --max-turns 200
-            --allowedTools "Read,Grep,Glob,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*),Bash(git merge-base:*),Bash(readtags:*),Bash(cscope:*)"
+            --allowedTools "Read,Grep,Glob,Write,Edit,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*),Bash(git merge-base:*),Bash(readtags:*),Bash(cscope:*)"
 
       # Footer with cost/tokens/duration, summed across both passes. Generated
       # by the workflow, not the model, so the numbers can't be invented.

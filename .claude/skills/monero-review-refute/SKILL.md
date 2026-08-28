@@ -1,7 +1,7 @@
 ---
 name: monero-review-refute
 description: Adversarially verify the findings in an existing Monero PR review.
-allowed-tools: Read, Grep, Glob, Write, Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git blame:*), Bash(git merge-base:*), Bash(readtags:*), Bash(cscope:*)
+allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git blame:*), Bash(git merge-base:*), Bash(readtags:*), Bash(cscope:*)
 ---
 
 A first-pass security review of this pull request has already been written to
