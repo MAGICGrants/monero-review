@@ -1,7 +1,7 @@
 ---
 name: monero-security-review
 description: Security review of the changes in a Monero pull request.
-allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git blame:*), Bash(git merge-base:*), Bash(readtags:*), Bash(cscope:*)
+allowed-tools: Read, Grep, Glob, Write, Edit, Skill, Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git blame:*), Bash(git merge-base:*), Bash(readtags:*), Bash(cscope:*)
 ---
 
 You are reviewing one pull request against `monero-project/monero` for
@@ -39,10 +39,18 @@ refusal costs you a turn for nothing:
 | `$(...)` command substitution | resolve it in a separate call, paste the value |
 | `git --no-pager diff ...` | `git diff ...` — there is no pager here |
 | `git diff ... > /tmp/f` | let the output come back; read it |
+| `git diff ... > f; wc -l f` | `git diff --stat ...` for sizes |
 | `cmd1; cmd2` or `cmd1 && cmd2` | two separate calls |
 
 Prefer `Edit` over rewriting `review.md` with `Write` when adding a finding to
 a report you have already started.
+
+**On a large diff, do not try to write it to files first.** Redirects are
+refused, so a run that reaches for them spends its whole budget being denied
+and produces nothing — measured: 21 refusals, 18 of them redirects, 12 turns,
+no report. Take the diff a path at a time instead: `git diff --stat
+origin/base...HEAD` for the shape, then `git diff origin/base...HEAD -- <path>`
+per file or directory, reading each result as it comes back.
 
 Read `PR_CONTEXT.md` first — the PR title and description. Stated intent is
 leverage: "does this do what it claims, and what *else* does it do" is a much

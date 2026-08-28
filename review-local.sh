@@ -98,7 +98,7 @@ cp -r "$HERE/.claude" "$CACHE/.claude"
 # are absent -- `sudo apt install universal-ctags cscope` to enable.
 bash "$HERE/scripts/build_index.sh" "$CACHE"
 
-TOOLS="Read,Grep,Glob,Write,Edit,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*),Bash(git merge-base:*),Bash(readtags:*),Bash(cscope:*)"
+TOOLS="Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*),Bash(git merge-base:*),Bash(readtags:*),Bash(cscope:*)"
 
 rm -f "$CACHE/review.md" "$CACHE/exec.json" "$CACHE/exec-refute.json"
 echo "==> reviewing with $MODEL"
