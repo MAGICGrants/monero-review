@@ -321,6 +321,13 @@ jobs:
         if: always()
         env:
           VERIFY_OUTCOME: ${{ steps.refute.outcome }}
+          # A step outcome of `success` is not proof the model ran. When
+          # claude-code-action declines itself -- a workflow-validation skip --
+          # it exits 0 having done nothing, and its execution_file output is
+          # empty. Requiring that output to be non-empty is what distinguishes
+          # "pass 2 attacked the findings" from "pass 2 was never invoked", and
+          # without it a skipped verification would stamp findings as verified.
+          REFUTE_EXEC: ${{ steps.refute.outputs.execution_file }}
         run: |
           set -euo pipefail
           if [ ! -s review.md ]; then
@@ -338,12 +345,17 @@ jobs:
           if [ -z "$sevs" ]; then
             state=none
             note="first pass reported no findings, so there was nothing to attack."
-          elif [ "${VERIFY_OUTCOME:-}" = "success" ]; then
+          elif [ "${VERIFY_OUTCOME:-}" = "success" ] && [ -n "${REFUTE_EXEC:-}" ]; then
             state=verified
             note="every finding above was attacked by an independent adversarial pass, default verdict REFUTED. Refuted candidates are kept in the report."
           else
             state=unverified
-            note="**NOT VERIFIED** — the adversarial pass did not complete (\`${VERIFY_OUTCOME:-did not run}\`). Expect false positives."
+            if [ "${VERIFY_OUTCOME:-}" = "success" ]; then
+              why="reported success but never actually ran"
+            else
+              why="${VERIFY_OUTCOME:-did not run}"
+            fi
+            note="**NOT VERIFIED** — the adversarial pass did not complete (\`$why\`). Expect false positives."
           fi
 
           echo "state=$state" >> "$GITHUB_OUTPUT"
