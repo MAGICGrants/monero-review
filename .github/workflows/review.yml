@@ -359,6 +359,22 @@ jobs:
           [ -f .harness/scripts/telemetry.py ] || exit 0
           python3 .harness/scripts/telemetry.py
 
+      # Which tool calls were refused, printed into the log. The job log
+      # otherwise carries only `permission_denials_count`, and that number has
+      # been actively misleading: the same PR with the same allowlist recorded
+      # 0 denials outside Actions (a complete 23KB report) and 24 inside it
+      # (nothing written). Without the list there is no way to see which calls
+      # differ. The execution files are also uploaded as an artifact, but
+      # reading those needs credentials the diagnosing party may not have,
+      # whereas the log is always readable.
+      - name: Refused tool calls
+        if: always()
+        env:
+          EXEC_FILE: ${{ steps.claude.outputs.execution_file }},${{ steps.refute.outputs.execution_file }}
+        run: |
+          [ -f .harness/scripts/denials.py ] || exit 0
+          python3 .harness/scripts/denials.py | tee -a "$GITHUB_STEP_SUMMARY"
+
       # Whether the adversarial pass actually ran is part of the deliverable,
       # so the workflow says so -- like the telemetry above, and for the same
       # reason: a claim the model cannot make about itself. Of the first 51
