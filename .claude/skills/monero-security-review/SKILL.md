@@ -1,7 +1,7 @@
 ---
 name: monero-security-review
 description: Security review of the changes in a Monero pull request.
-allowed-tools: Read, Grep, Glob, Write, Edit, Skill, Bash(git diff:*), Bash(git fetch origin:*), Bash(git log:*), Bash(git show:*), Bash(git blame:*), Bash(git merge-base:*), Bash(git grep:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git cat-file:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git describe:*), Bash(git shortlog:*), Bash(git name-rev:*), Bash(git --no-pager:*), Bash(readtags:*), Bash(cscope:*), Bash(rg:*), Bash(grep:*), Bash(sed:*), Bash(awk:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(sort:*), Bash(uniq:*), Bash(cut:*), Bash(tr:*), Bash(nl:*), Bash(comm:*), Bash(diff:*), Bash(find:*), Bash(ls:*), Bash(cat:*), Bash(file:*), Bash(stat:*), Bash(xxd:*), Bash(od:*), Bash(strings:*), Bash(basename:*), Bash(dirname:*), Bash(jq:*), Bash(python3:*)
+allowed-tools: Read, Grep, Glob, Write, Edit, Skill, Bash(git diff:*), Bash(git fetch origin:*), Bash(git log:*), Bash(git show:*), Bash(git blame:*), Bash(git merge-base:*), Bash(git grep:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git cat-file:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git describe:*), Bash(git shortlog:*), Bash(git name-rev:*), Bash(git --no-pager:*), Bash(readtags:*), Bash(cscope:*), Bash(rg:*), Bash(grep:*), Bash(sed:*), Bash(awk:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(sort:*), Bash(uniq:*), Bash(cut:*), Bash(tr:*), Bash(nl:*), Bash(comm:*), Bash(diff:*), Bash(find:*), Bash(ls:*), Bash(cat:*), Bash(file:*), Bash(stat:*), Bash(xxd:*), Bash(od:*), Bash(strings:*), Bash(basename:*), Bash(dirname:*), Bash(jq:*)
 ---
 
 You are reviewing one pull request against `monero-project/monero` for
@@ -37,14 +37,25 @@ You have a wide set of read-only tools: git's inspection subcommands (`diff`,
 `cscope`), and
 the usual text utilities (`rg`, `grep`, `sed`, `awk`, `head`, `tail`, `wc`,
 `sort`, `uniq`, `cut`, `tr`, `nl`, `comm`, `diff`, `find`, `ls`, `cat`, `file`,
-`stat`, `xxd`, `od`, `strings`, `jq`), and `python3`.
+`stat`, `xxd`, `od`, `strings`, `jq`).
 
-`python3` is for arithmetic and parsing you would otherwise do in your head:
-overflow bounds, size computations, struct layout, decoding a hex blob from the
-diff. Run it as `python3 -c '<script>'` on data you paste in yourself. It has no
-network access and must not be used to fetch anything — the review is a
-read-only analysis of a checkout that is already on disk. Note that `$(...)` is
-refused inside the `-c` script the same as anywhere else.
+**There is no interpreter, and arithmetic is yours to do carefully.** `python3`
+is deliberately not available: a general interpreter can open network sockets,
+and this sandbox holds credentials that must not leave it. Nothing about
+reading a diff needs one.
+
+That matters most for overflow claims, which are the easiest finding to get
+wrong in both directions. Do not reach for `awk` to settle one — it computes in
+double precision and silently rounds above 2^53, so it will cheerfully agree
+that two unequal 64-bit numbers are equal. Measured: `awk 'BEGIN{print 2^64-1}'`
+prints `18446744073709551616`, which is 2^64, not 2^64-1.
+
+So work an overflow claim symbolically and **show it in the finding**: name the
+declared type and its exact width, the operands and where each comes from, the
+product or sum, and the bound it crosses. `size_t` (64-bit) vs `uint32_t` is
+usually the whole argument, and powers of two are exact when written out.
+Writing it down is also what lets the engineer reading your report check you —
+a bare assertion that something overflows is not a finding.
 
 **Pipes work.** `git diff origin/base...HEAD | wc -l`, `sed -n '100,200p' f.cpp
 | grep -n free`, `cscope -d -L3 fn | head -40` are all fine — use them freely.
