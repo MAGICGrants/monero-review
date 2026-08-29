@@ -59,3 +59,25 @@ if have cscope; then
     echo "index: cscope failed, continuing without it" >&2
   fi
 fi
+
+# A SEPARATE index for tests/, deliberately not merged into the one above.
+#
+# Tests are the best available evidence of what a change is *supposed* to do,
+# which is exactly the question a review asks of a diff -- and PRs frequently
+# change them alongside the code (10819's own diff touches
+# tests/libwallet_api_tests/main.cpp). But folding 211 test files into the main
+# caller index would bury the reachability answers the review depends on under
+# harness noise, which is why they were excluded in the first place. Two
+# indexes gets both: clean caller lists by default, test usage on request.
+if [ -d tests ] && have cscope; then
+  find tests -type f \
+    \( -name '*.c'  -o -name '*.cc'  -o -name '*.cpp' \
+    -o -name '*.h'  -o -name '*.hpp' -o -name '*.inl' \) \
+    > cscope.tests.files 2>/dev/null || true
+  tcount=$(wc -l < cscope.tests.files | tr -d ' ')
+  if [ "$tcount" != "0" ] && cscope -b -q -k -i cscope.tests.files -f tests.out 2>/dev/null; then
+    echo "index: tests database built (${tcount} files)" >&2
+  else
+    echo "index: tests database skipped" >&2
+  fi
+fi
