@@ -234,40 +234,50 @@ MEDIUM when keys are in the process — correct it upward and say so.
 
 ## Output
 
-Rewrite `review.md` in place. Keep the original summary and "What was checked"
-sections, then present:
+Rewrite `review.md` in place, keeping the header block and `Checked and clear`,
+and updating them where you proved the first pass wrong.
+
+**Compress as you verify.** A first pass tends to narrate — it explains what it
+tried, in what order, and how confident it feels. Strip that. What survives is
+the claim, the citation, and the reason the obvious refutation failed. If you
+cannot state a finding's mechanism in a dozen lines, you have not finished
+reducing it.
 
 ```markdown
-## Findings
-
 ### [SEVERITY / CONFIRMED] Short title
-(the original finding, corrected where the first pass got details wrong)
-- **Verification:** what you did to attack it and why it survived.
+(the finding, corrected where the first pass got details wrong)
+- **Verification:** what you attacked it with, and the `file:line` that failed
+  to kill it. One or two sentences.
 
-## Refuted during verification
-
-### ~~Short title~~ — REFUTED
-- **Original claim:** one line.
-- **Why it fails:** the guard, with `file:line`.
+## Refuted
+- ~~Title~~ — the guard, with `file:line`.
 ```
 
-Keep refuted findings in the file rather than deleting them. A reader needs to
-see what was considered and dismissed — that is what makes the surviving
-findings credible, and it stops the same false positive being re-raised on the
-next push.
+**One line per refuted candidate.** You did the work of killing it; the reader
+needs the verdict and the citation, not the account. Six paragraphs of
+refutation narrative buries the findings that survived, which are the only part
+anyone acts on. Keep the `## Refuted` heading exactly as spelled — the harness
+reads it so dead findings cannot label the issue.
 
-If every finding is refuted, say so plainly at the top of the summary: the PR
-had no confirmed security findings, and here is what was considered.
+If every finding is refuted, say "No findings." in the header block and let
+`Refuted` and `Checked and clear` carry the report.
+
+Correcting the first pass counts as a result and belongs in the finding, not in
+a preamble: a severity you moved, a magnitude you narrowed, a citation you
+fixed. State the corrected value and why, in a clause.
 
 ### The verification notes are the deliverable
 
 A reader cannot tell a verified finding from a rubber-stamped one except by
-what you write down. So for every surviving finding the `**Verification:**`
-line is mandatory, and every candidate you killed goes under
-`## Refuted during verification` with the guard's `file:line`. Across the
-first 51 reviews of this harness, neither appeared even once — the harness now
-states plainly, on the published issue, when they are missing, so an omission
-is visible rather than invisible.
+what you write down, so the `**Verification:**` line is mandatory on every
+surviving finding and every killed candidate gets its line under `## Refuted`
+with a `file:line`. Across the first 51 reviews of this harness neither
+appeared even once, and the harness now says so on the published issue when
+they are missing — an omission is visible, not invisible.
+
+Terse is not the same as absent. `- **Verification:** re-read the guard at
+x.cpp:41; it only covers the len < 8 case` is short and is evidence.
+"Verified." is neither.
 
 Do not write a `Verification:` footer or any other claim about whether an
 adversarial pass ran: the harness appends that from what actually happened,

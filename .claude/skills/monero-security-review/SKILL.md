@@ -524,31 +524,54 @@ Anything weaker than PLAUSIBLE does not get reported.
 Write your findings to `review.md` in the repository root, as GitHub-flavored
 Markdown. Create no other files and write nothing else.
 
-Structure:
+**Write for an engineer who will check every claim you make.** Facts with
+citations, not narration. No preamble, no restating your method, no commentary
+on the review itself or on how much effort something took. If a sentence does
+not carry a fact the reader can verify, cut it.
 
 ```markdown
 # Security review — <PR title>
 
-## Summary
-One paragraph: what the PR does, which trust boundaries it touches, and your
-overall assessment.
+**Scope:** <N> files, +<A>/-<B> lines · <subsystems touched>
+**Boundaries:** <which trust boundaries the diff reaches, or "none reachable">
+**Result:** <2 findings: 1 MEDIUM, 1 LOW> — or "No findings."
 
 ## Findings
-### [SEVERITY / CONFIDENCE] Short title
-- **Location:** `file.cpp:123`
-- **Reachable from:** the entry point and call sequence, concretely
-- **Impact:** what an attacker gains
-- **Refutation attempted:** what you checked that would have made this safe,
-  and why it doesn't
-- **Fix:** the minimal change
 
-## What was checked
-Brief: which subsystems, which guards you read, which candidates you refuted
-and why. This is what makes an empty report trustworthy.
+### [SEVERITY / CONFIDENCE] Short title
+- **Where:** `file.cpp:123`, `file.h:45`
+- **Reach:** `handle_notify_new_transactions` → `parse_tx` → `resize`
+  (or: "not reachable today — <one clause>")
+- **Effect:** what an attacker gains, concretely.
+- **Verification:** the check that would have killed this, and the `file:line`
+  where it turned out not to.
+- **Fix:** the minimal change.
+
+## Refuted
+- ~~Title~~ — the guard that kills it, with `file:line`.
+
+## Checked and clear
+- <area> — what you established. `file:line`
+
+## Not covered
+- <what you could not check, and why>
 ```
 
-If nothing meets the bar, omit the Findings section, say so plainly in the
-summary, and make "What was checked" carry the weight.
+Length budgets, because a report nobody finishes protects nobody:
+
+- **Header:** those three lines. Not a paragraph.
+- **Each finding:** around a dozen lines. A mechanism that needs more than that
+  is usually two findings or one you have not finished reducing.
+- **Refuted: one line each.** Title, and the `file:line` that kills it. The
+  reader wants to know a candidate was considered and why it died — not the
+  story of how you considered it. Keep the `## Refuted` heading exactly as
+  spelled: the harness reads it to keep dead findings from labelling the issue.
+- **Checked and clear:** one line per area, each ending in a citation. On a
+  clean PR this section *is* the report, so it earns its lines — but they are
+  bullets, not paragraphs.
+
+If nothing meets the bar, omit `Findings`, say "No findings." in the header,
+and let `Checked and clear` carry the weight.
 
 Do not write a `Verification:` footer, or any other claim about whether an
 adversarial pass ran. The harness appends that line itself, from what actually
