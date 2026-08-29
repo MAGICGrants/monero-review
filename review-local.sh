@@ -48,6 +48,19 @@ git -C "$CACHE" fetch --filter=blob:none --quiet origin \
   "+refs/pull/$PR/head:refs/heads/pr-$PR"
 git -C "$CACHE" checkout --quiet --force "pr-$PR"
 
+# Submodule contents at the PR head's pinned commits, so external/rapidjson,
+# randomx, supercop and gtest are readable instead of empty directories. AFTER
+# the checkout, not on the clone: cloning with --recurse-submodules would pin
+# them to the base branch and show a bump PR its OLD dependency. No --recursive
+# (the only nested one is rapidjson's own gtest, which nothing here wants).
+#
+# Best-effort, like the workflow: this is context, not the deliverable, and the
+# skills check whether the source is actually there. Measured at ~7s / +37MB on
+# a warm cache; a cold one pays a little more.
+if ! git -C "$CACHE" submodule update --init --filter=blob:none --quiet; then
+  echo "!! submodule fetch failed -- external/ deps will be unreadable" >&2
+fi
+
 # Same early proof the workflow makes: if the diff cannot be computed, say so
 # now rather than paying for a review that reconstructs the change by reading
 # only the post-image.

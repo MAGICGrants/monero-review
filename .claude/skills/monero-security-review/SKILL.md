@@ -56,21 +56,30 @@ different gates, and no allowlist entry gets you past the second. It costs a
 turn every time. `git ls-files | grep <name>` locates any tracked file in the
 tree and, unlike `find`, cannot wander off it.
 
-**Four dependencies are not in the checkout at all.** `external/rapidjson`,
-`external/randomx`, `external/supercop` and `external/gtest` are git
-submodules, and the harness clones without `--recurse-submodules`: those
-directories exist but are empty. The rest of `external/` (`db_drivers`,
-`easylogging++`, `qrcodegen`, `boost` shims) and all of `contrib/epee` are
-real files you can read.
+**Vendored dependencies are readable, but `git ls-files` cannot see them.**
+`external/rapidjson`, `external/randomx`, `external/supercop` and
+`external/gtest` are git submodules that the harness fetches at the PR head's
+pinned commits. Their source is on disk — `external/rapidjson/include/rapidjson/reader.h`
+is a real file — but because they are separate repositories, `git ls-files` and
+`git grep` do not reach into them. Use `rg` or `find external/<name>` there
+instead. Everything else under `external/` and all of `contrib/epee` is
+ordinary tracked source.
 
-This matters twice. If a finding turns on what rapidjson's parser or RandomX
-actually does, **you cannot check it and must not pretend otherwise** — report
-the concern with an explicit note that the dependency source was unavailable,
-and do not hunt for it on the filesystem, because it is not there. And if the
-diff itself *bumps* one of these submodules, the change you have been given is
-a single gitlink hash with no readable content behind it: say plainly that the
-substance of the change could not be reviewed, name the old and new hashes, and
-do not file a clean report as though you had examined it.
+This is worth knowing because rapidjson parses attacker-controlled JSON on the
+RPC boundary and randomx is consensus-critical proof-of-work, so a finding can
+legitimately turn on what one of them does — and now you can go and read it
+rather than assuming. Confirm the source is present before relying on it (a
+submodule fetch failure is non-fatal and leaves the directory empty); if it is
+empty, say the dependency was unavailable rather than guessing at its
+behaviour.
+
+If the diff **bumps** a submodule, the change appears as a single gitlink hash
+going from one value to another. You can read the new pinned tree, but you
+cannot enumerate the upstream commits between the two hashes from inside this
+sandbox. Report what the bump is — name both hashes and the dependency — and
+say plainly that the upstream changes between them were not reviewable here.
+Do not file a clean report on a RandomX or rapidjson bump as though you had
+examined what changed.
 
 `git fetch` is allowed, but you should rarely want it. The harness has already
 fetched `origin/base` and the PR head before you start, and both are complete —

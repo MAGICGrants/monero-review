@@ -175,6 +175,32 @@ jobs:
             "+refs/heads/$BASE:refs/remotes/origin/base" \
             "+refs/pull/${{ matrix.pr }}/head:refs/heads/pr"
           git checkout --quiet pr
+
+          # Submodule contents, fetched AFTER the head checkout -- not via
+          # `clone --recurse-submodules`, which would pin them to the BASE
+          # branch's gitlinks and show a submodule-bump PR its OLD dependency.
+          #
+          # external/{rapidjson,randomx,supercop,gtest} are submodules, so
+          # without this they are empty directories: rapidjson parses
+          # attacker-controlled JSON on the RPC boundary and randomx is
+          # consensus-critical PoW, and neither could be read at all. Measured
+          # on the real tree: 6.9s and +37MB blobless, against a review that
+          # costs minutes.
+          #
+          # No --recursive: the only nested submodule is rapidjson's own copy
+          # of gtest (5.7MB), which Monero never builds and no review wants.
+          #
+          # Non-fatal by design. This is context, not the deliverable -- the
+          # diff already failed loudly above if it could not be obtained -- and
+          # the skills check whether the source is there rather than assuming.
+          # `if cmd | tail` tests the PIPELINE, so the warning branch only
+          # fires because this step sets pipefail. Do not drop it.
+          if git submodule update --init --filter=blob:none 2>&1 | tail -5; then
+            echo "submodules: $(git submodule status | wc -l) initialised"
+          else
+            echo "::warning::submodule fetch failed; external/ deps unreadable"
+          fi
+
           # Fixed 12 chars, not --short: `select` compares against this prefix
           # and git's abbreviation length is not stable across repo states.
           echo "HEAD_SHA=$(git rev-parse HEAD | cut -c1-12)" >> "$GITHUB_ENV"

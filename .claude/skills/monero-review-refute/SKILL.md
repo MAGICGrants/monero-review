@@ -103,12 +103,19 @@ Two more turn-wasters worth knowing before you hit them:
   allowlist, and nothing you add to a command gets past it. Use
   `git ls-files | grep <name>` to locate anything you cannot place.
 - **`external/rapidjson`, `external/randomx`, `external/supercop` and
-  `external/gtest` are empty.** They are submodules and the harness does not
-  clone them. So a first-pass finding resting on what one of those libraries
-  does is UNRESOLVED, not REFUTED: you cannot read the guard that would refute
-  it any more than pass 1 could read the bug. Say which library and what would
-  settle it. Do not refute such a finding by asserting the library handles it —
-  that is exactly the unread-guard move this pass exists to catch.
+  `external/gtest` are submodules whose source IS fetched**, at the PR head's
+  pinned commits — but `git ls-files` and `git grep` cannot see inside them,
+  since they are separate repositories. Use `rg` or `find external/<name>`.
+  This matters directly to you: "rapidjson surely bounds that" was previously
+  an unread guard you had to leave UNRESOLVED, and now it is a claim you can
+  settle by reading `external/rapidjson/include/rapidjson/reader.h` and citing
+  the line. Go and read it. If the directory is empty (the fetch is non-fatal
+  and can fail), it is UNRESOLVED again — never REFUTED on the strength of what
+  a library probably does.
+- **A submodule bump is only half-reviewable.** You can read the newly pinned
+  tree, but not the upstream commit range between the old and new hashes. A
+  first-pass finding about what a bump changed is UNRESOLVED unless it is
+  visible in the pinned source itself.
 - **`git fetch` is allowed but almost never needed.** `origin/base` and the PR
   head were both fetched by the harness before pass 1 ran, and they are
   complete. Use it only if a command genuinely fails on a missing object.
