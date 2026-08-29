@@ -1,7 +1,7 @@
 ---
 name: monero-security-review
 description: Security review of the changes in a Monero pull request.
-allowed-tools: Read, Grep, Glob, Write, Edit, Skill, Bash(git diff:*), Bash(git fetch origin:*), Bash(git log:*), Bash(git show:*), Bash(git merge-base:*), Bash(git grep:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git cat-file:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git describe:*), Bash(git shortlog:*), Bash(git name-rev:*), Bash(git --no-pager:*), Bash(readtags:*), Bash(cscope:*), Bash(rg:*), Bash(grep:*), Bash(sed:*), Bash(awk:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(sort:*), Bash(uniq:*), Bash(cut:*), Bash(tr:*), Bash(nl:*), Bash(comm:*), Bash(diff:*), Bash(find:*), Bash(ls:*), Bash(cat:*), Bash(file:*), Bash(stat:*), Bash(xxd:*), Bash(od:*), Bash(strings:*), Bash(basename:*), Bash(dirname:*), Bash(jq:*), Bash(bc:*), Bash(shellcheck:*), Bash(g++ -E:*)
+allowed-tools: Read, Grep, Glob, Write, Edit, Skill, Bash(git diff:*), Bash(git fetch origin:*), Bash(git log:*), Bash(git show:*), Bash(git merge-base:*), Bash(git grep:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git cat-file:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git describe:*), Bash(git shortlog:*), Bash(git name-rev:*), Bash(git --no-pager:*), Bash(readtags:*), Bash(cscope:*), Bash(rg:*), Bash(grep:*), Bash(sed:*), Bash(awk:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(sort:*), Bash(uniq:*), Bash(cut:*), Bash(tr:*), Bash(nl:*), Bash(comm:*), Bash(diff:*), Bash(find:*), Bash(ls:*), Bash(cat:*), Bash(file:*), Bash(stat:*), Bash(xxd:*), Bash(od:*), Bash(strings:*), Bash(basename:*), Bash(dirname:*), Bash(jq:*), Bash(bc:*), Bash(shellcheck:*), Bash(g++ -E:*), Bash(weggli:*)
 ---
 
 You are reviewing one pull request against `monero-project/monero` for
@@ -99,6 +99,27 @@ one.
   anything. Output is enormous (282k lines for that header), so always pipe it
   through `grep`. It may fail on a missing header; that is fine and expected,
   it is a tool and not a requirement.
+- **`weggli` — semantic pattern matching for C/C++.** It matches on syntax
+  rather than text, so it finds shapes grep cannot: an allocation whose size
+  differs from the copy that follows it, a check on one variable and a use of
+  another. It tolerates code that does not compile.
+
+  ```
+  weggli --cpp -e cpp -e h -e inl -- '{ $b = malloc($n); memcpy($b, $s, $len); }' src/
+  ```
+
+  Four things will silently waste your turn if you skip them, all measured:
+  it defaults to **C mode** and scans only `.c`/`.h` unless you pass `--cpp`;
+  `.inl` is not in either default set, which matters enormously here because
+  `cryptonote_protocol_handler.inl` is the P2P trust boundary; the repeatable
+  `-e` flag swallows the positional arguments unless you put `--` before the
+  pattern; and it takes exactly **one** path, not several.
+
+  An empty result is genuinely empty — verified by running `'{ _; }'` against
+  `cryptonote_protocol_handler.inl` and getting real function bodies back. If
+  you are unsure whether a query is matching nothing or scanning nothing, run
+  that probe.
+
 - **`shellcheck`** — when the diff touches a `.sh` file. Monero ships real
   shell in `contrib/guix/`, `contrib/tor/` and `src/device_trezor/`, and a
   build or packaging script is a genuine supply-chain surface, so a PR touching

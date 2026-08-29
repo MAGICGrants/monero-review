@@ -465,12 +465,22 @@ jobs:
             libzmq3-dev libprotobuf-dev libhidapi-dev libusb-1.0-0-dev \
             libunwind-dev || true
 
-          # weggli was tried here and REMOVED. The release asset URL was a
-          # guess shipped without verification, and run 122 confirmed it never
-          # installed (TOOLING.md reported "weggli: NOT AVAILABLE"). Rather
-          # than ship a second guess, it is gone. To re-add it, verify the
-          # asset name against the weggli-rs releases page first and check
-          # TOOLING.md on the next run -- do not assume it worked.
+          # weggli: semantic pattern matching for C/C++, tolerant of code that
+          # does not compile. Installed from crates.io rather than from a
+          # release binary -- the release URL was a guess that never worked
+          # (run 122: "weggli: NOT AVAILABLE"), whereas this path is measured:
+          # `cargo install weggli --locked` builds weggli 0.2.4 in 31s, and
+          # ubuntu-latest ships cargo. Verified to parse Monero C++ including
+          # the .inl trust-boundary files.
+          #
+          # Still non-fatal, and TOOLING.md still reports the outcome: check
+          # there rather than assuming, which is the lesson from last time.
+          # If 31s per run ever matters, cache ~/.cargo/bin/weggli.
+          if command -v cargo >/dev/null 2>&1; then
+            timeout 300 cargo install weggli --locked >/dev/null 2>&1 || true
+            [ -x "$HOME/.cargo/bin/weggli" ] && \
+              sudo ln -sf "$HOME/.cargo/bin/weggli" /usr/local/bin/weggli 2>/dev/null || true
+          fi
 
           {
             echo "Optional analysis tools available in this checkout."
@@ -478,7 +488,7 @@ jobs:
             echo "Each is a TOOL, not a requirement. A missing one is never a"
             echo "reason to skip a check -- fall back and say so in the report."
             echo
-            for t in ctags readtags cscope rg bc shellcheck g++; do
+            for t in ctags readtags cscope rg bc shellcheck g++ weggli; do
               if command -v "$t" >/dev/null 2>&1; then
                 printf -- '- %s: available\n' "$t"
               else
@@ -513,7 +523,7 @@ jobs:
           claude_args: |
             --model ${{ inputs.model || env.DEFAULT_MODEL }}
             --max-turns 200
-            --allowedTools "Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git fetch origin:*),Bash(git log:*),Bash(git show:*),Bash(git merge-base:*),Bash(git grep:*),Bash(git rev-parse:*),Bash(git rev-list:*),Bash(git cat-file:*),Bash(git ls-files:*),Bash(git ls-tree:*),Bash(git describe:*),Bash(git shortlog:*),Bash(git name-rev:*),Bash(git --no-pager:*),Bash(readtags:*),Bash(cscope:*),Bash(rg:*),Bash(grep:*),Bash(sed:*),Bash(awk:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(uniq:*),Bash(cut:*),Bash(tr:*),Bash(nl:*),Bash(comm:*),Bash(diff:*),Bash(find:*),Bash(ls:*),Bash(cat:*),Bash(file:*),Bash(stat:*),Bash(xxd:*),Bash(od:*),Bash(strings:*),Bash(basename:*),Bash(dirname:*),Bash(jq:*),Bash(bc:*),Bash(shellcheck:*),Bash(g++ -E:*)"
+            --allowedTools "Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git fetch origin:*),Bash(git log:*),Bash(git show:*),Bash(git merge-base:*),Bash(git grep:*),Bash(git rev-parse:*),Bash(git rev-list:*),Bash(git cat-file:*),Bash(git ls-files:*),Bash(git ls-tree:*),Bash(git describe:*),Bash(git shortlog:*),Bash(git name-rev:*),Bash(git --no-pager:*),Bash(readtags:*),Bash(cscope:*),Bash(rg:*),Bash(grep:*),Bash(sed:*),Bash(awk:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(uniq:*),Bash(cut:*),Bash(tr:*),Bash(nl:*),Bash(comm:*),Bash(diff:*),Bash(find:*),Bash(ls:*),Bash(cat:*),Bash(file:*),Bash(stat:*),Bash(xxd:*),Bash(od:*),Bash(strings:*),Bash(basename:*),Bash(dirname:*),Bash(jq:*),Bash(bc:*),Bash(shellcheck:*),Bash(g++ -E:*),Bash(weggli:*)"
 
       # NB: this list is the one that BINDS. The `allowed-tools:` line in
       # each skill's frontmatter is documentation, and review-local.sh carries
@@ -610,7 +620,7 @@ jobs:
           claude_args: |
             --model ${{ inputs.model || env.DEFAULT_MODEL }}
             --max-turns 200
-            --allowedTools "Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git fetch origin:*),Bash(git log:*),Bash(git show:*),Bash(git merge-base:*),Bash(git grep:*),Bash(git rev-parse:*),Bash(git rev-list:*),Bash(git cat-file:*),Bash(git ls-files:*),Bash(git ls-tree:*),Bash(git describe:*),Bash(git shortlog:*),Bash(git name-rev:*),Bash(git --no-pager:*),Bash(readtags:*),Bash(cscope:*),Bash(rg:*),Bash(grep:*),Bash(sed:*),Bash(awk:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(uniq:*),Bash(cut:*),Bash(tr:*),Bash(nl:*),Bash(comm:*),Bash(diff:*),Bash(find:*),Bash(ls:*),Bash(cat:*),Bash(file:*),Bash(stat:*),Bash(xxd:*),Bash(od:*),Bash(strings:*),Bash(basename:*),Bash(dirname:*),Bash(jq:*),Bash(bc:*),Bash(shellcheck:*),Bash(g++ -E:*)"
+            --allowedTools "Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git fetch origin:*),Bash(git log:*),Bash(git show:*),Bash(git merge-base:*),Bash(git grep:*),Bash(git rev-parse:*),Bash(git rev-list:*),Bash(git cat-file:*),Bash(git ls-files:*),Bash(git ls-tree:*),Bash(git describe:*),Bash(git shortlog:*),Bash(git name-rev:*),Bash(git --no-pager:*),Bash(readtags:*),Bash(cscope:*),Bash(rg:*),Bash(grep:*),Bash(sed:*),Bash(awk:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(uniq:*),Bash(cut:*),Bash(tr:*),Bash(nl:*),Bash(comm:*),Bash(diff:*),Bash(find:*),Bash(ls:*),Bash(cat:*),Bash(file:*),Bash(stat:*),Bash(xxd:*),Bash(od:*),Bash(strings:*),Bash(basename:*),Bash(dirname:*),Bash(jq:*),Bash(bc:*),Bash(shellcheck:*),Bash(g++ -E:*),Bash(weggli:*)"
 
       # Footer with cost/tokens/duration, summed across both passes. Generated
       # by the workflow, not the model, so the numbers can't be invented.

@@ -1,7 +1,7 @@
 ---
 name: monero-review-refute
 description: Adversarially verify the findings in an existing Monero PR review.
-allowed-tools: Read, Grep, Glob, Write, Edit, Skill, Bash(git diff:*), Bash(git fetch origin:*), Bash(git log:*), Bash(git show:*), Bash(git merge-base:*), Bash(git grep:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git cat-file:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git describe:*), Bash(git shortlog:*), Bash(git name-rev:*), Bash(git --no-pager:*), Bash(readtags:*), Bash(cscope:*), Bash(rg:*), Bash(grep:*), Bash(sed:*), Bash(awk:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(sort:*), Bash(uniq:*), Bash(cut:*), Bash(tr:*), Bash(nl:*), Bash(comm:*), Bash(diff:*), Bash(find:*), Bash(ls:*), Bash(cat:*), Bash(file:*), Bash(stat:*), Bash(xxd:*), Bash(od:*), Bash(strings:*), Bash(basename:*), Bash(dirname:*), Bash(jq:*), Bash(bc:*), Bash(shellcheck:*), Bash(g++ -E:*)
+allowed-tools: Read, Grep, Glob, Write, Edit, Skill, Bash(git diff:*), Bash(git fetch origin:*), Bash(git log:*), Bash(git show:*), Bash(git merge-base:*), Bash(git grep:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git cat-file:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git describe:*), Bash(git shortlog:*), Bash(git name-rev:*), Bash(git --no-pager:*), Bash(readtags:*), Bash(cscope:*), Bash(rg:*), Bash(grep:*), Bash(sed:*), Bash(awk:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(sort:*), Bash(uniq:*), Bash(cut:*), Bash(tr:*), Bash(nl:*), Bash(comm:*), Bash(diff:*), Bash(find:*), Bash(ls:*), Bash(cat:*), Bash(file:*), Bash(stat:*), Bash(xxd:*), Bash(od:*), Bash(strings:*), Bash(basename:*), Bash(dirname:*), Bash(jq:*), Bash(bc:*), Bash(shellcheck:*), Bash(g++ -E:*), Bash(weggli:*)
 ---
 
 A first-pass security review of this pull request has already been written to
@@ -66,7 +66,10 @@ CONFIRMED.
   serializer macros (preprocessor only; it does not compile or run anything),
   which is the one way to see what `KV_SERIALIZE` actually generates when a
   finding turns on the wire boundary. `shellcheck` covers a diff touching
-  `.sh`. None is a
+  `.sh`; `weggli` matches C/C++ by syntax rather than text and is
+  useful for "is this shape anywhere else in the tree" — note it needs
+  `--cpp -e cpp -e h -e inl --` before the pattern, takes one path, and
+  silently scans nothing without those flags. None is a
   requirement: if a tool you wanted is missing, the finding stays UNRESOLVED
   with the gap named, never REFUTED on the strength of a check you could not
   run.
