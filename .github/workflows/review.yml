@@ -25,20 +25,26 @@ on:
 
   # Twice an hour, off the top of the hour.
   #
-  # This schedule is a BACKUP AND A DIAGNOSTIC, not the clock. GitHub's
-  # scheduler dropped every tick this repo ever asked for -- see "the schedule"
-  # in the README for the measurement and the cause. Drive the drip from
-  # something that actually keeps time (an external `gh workflow run`, or
-  # scripts/drip.sh) and treat a run appearing here as a bonus.
+  # THIS IS NOW THE ONLY DRIVER OF THE QUEUE. It was written off as dead --
+  # for a long stretch GitHub dropped every tick this repo asked for, across
+  # every minute-of-hour tried (:00/:30, :17, :07/:27/:47, and all five
+  # residues mod 5 via `*/5`), which is why the README still describes it as
+  # unreliable and why scripts/dispatch.sh and scripts/drip.sh exist. It
+  # started firing on its own on 2026-08-29 and has been reliable since,
+  # landing about 5-6 minutes after the nominal minute. The external cron that
+  # used to drive this was retired the same night.
   #
-  # Two ticks an hour, not `*/5`: if the registration ever unsticks, a
-  # five-minute cron starts allocating 288 run records a day, nearly all of
-  # which the concurrency group cancels while still pending. Twice an hour is
-  # enough to restart a stalled queue and costs nothing when it does not fire.
+  # So: if reviews stop appearing, suspect this first. Nothing else is
+  # dispatching. `gh run list --repo <this repo>` shows whether ticks are
+  # arriving at all; if they stopped again, restart the drip externally with
+  # scripts/dispatch.sh from a machine that keeps time.
   #
-  # Do not "fix" this by moving the minute again. Every minute-of-hour has
-  # already been tried (:00/:30, :17, :07/:27/:47, and all five residues mod 5
-  # via `*/5`) and none of them fired. Congestion is not the cause.
+  # Two ticks an hour, not `*/5`: a five-minute cron allocates 288 run records
+  # a day, nearly all of which the concurrency group cancels while still
+  # pending. Twice an hour is enough to keep the queue moving.
+  #
+  # Do not "fix" a stall by moving the minute. That was tried exhaustively and
+  # congestion was never the cause.
   #
   # Stop it without editing this file:
   #   gh variable set REVIEW_PAUSED --body 1 --repo <this repo>
@@ -66,13 +72,17 @@ env:
   # reached only when nothing newer is unreviewed. Set this back to 1 once the
   # backlog is done and you only want to track new activity.
   MAX_AGE_DAYS: 0
-  # PRs reviewed per tick. Keep at 1: the drip's rate is set by how often
-  # something dispatches this workflow, not by how much each run swallows.
-  # Two PRs per dispatch while draining the ~250-deep backlog. They run as
-  # separate matrix legs, one at a time, each with its own timeout -- so this
-  # doubles throughput per tick without running two reviews concurrently.
-  # Drop back to 1 when the backlog is done.
-  BATCH: 2
+  # PRs reviewed per tick. The drip's rate is set by how often something
+  # dispatches this workflow, not by how much each run swallows.
+  #
+  # Back to 1. At 2 the legs run sequentially (max-parallel: 1) and each gets
+  # the full timeout-minutes, so one run could hold the concurrency group for
+  # four hours -- and GitHub keeps only ONE pending run per group, so every
+  # tick during that window is discarded rather than queued. At two ticks an
+  # hour that is up to eight lost. One PR per tick keeps each run inside a
+  # single tick interval, which matters more now that reviews are on Opus and
+  # take longer.
+  BATCH: 1
 
 # One review at a time, repo-wide. Rapid ticks collapse into a single pending
 # run rather than stacking, and no two runs can pick the same PR concurrently.
@@ -357,7 +367,7 @@ jobs:
           claude_args: |
             --model ${{ inputs.model || env.DEFAULT_MODEL }}
             --max-turns 200
-            --allowedTools "Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git fetch:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*),Bash(git merge-base:*),Bash(git grep:*),Bash(git rev-parse:*),Bash(git rev-list:*),Bash(git cat-file:*),Bash(git ls-files:*),Bash(git ls-tree:*),Bash(git describe:*),Bash(git shortlog:*),Bash(git name-rev:*),Bash(git --no-pager:*),Bash(readtags:*),Bash(cscope:*),Bash(rg:*),Bash(grep:*),Bash(sed:*),Bash(awk:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(uniq:*),Bash(cut:*),Bash(tr:*),Bash(nl:*),Bash(comm:*),Bash(diff:*),Bash(find:*),Bash(ls:*),Bash(cat:*),Bash(file:*),Bash(stat:*),Bash(xxd:*),Bash(od:*),Bash(strings:*),Bash(basename:*),Bash(dirname:*),Bash(jq:*),Bash(python3:*)"
+            --allowedTools "Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git fetch origin:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*),Bash(git merge-base:*),Bash(git grep:*),Bash(git rev-parse:*),Bash(git rev-list:*),Bash(git cat-file:*),Bash(git ls-files:*),Bash(git ls-tree:*),Bash(git describe:*),Bash(git shortlog:*),Bash(git name-rev:*),Bash(git --no-pager:*),Bash(readtags:*),Bash(cscope:*),Bash(rg:*),Bash(grep:*),Bash(sed:*),Bash(awk:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(uniq:*),Bash(cut:*),Bash(tr:*),Bash(nl:*),Bash(comm:*),Bash(diff:*),Bash(find:*),Bash(ls:*),Bash(cat:*),Bash(file:*),Bash(stat:*),Bash(xxd:*),Bash(od:*),Bash(strings:*),Bash(basename:*),Bash(dirname:*),Bash(jq:*),Bash(python3:*)"
 
       # NB: this list is the one that BINDS. The `allowed-tools:` line in
       # each skill's frontmatter is documentation, and review-local.sh carries
@@ -454,7 +464,7 @@ jobs:
           claude_args: |
             --model ${{ inputs.model || env.DEFAULT_MODEL }}
             --max-turns 200
-            --allowedTools "Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git fetch:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*),Bash(git merge-base:*),Bash(git grep:*),Bash(git rev-parse:*),Bash(git rev-list:*),Bash(git cat-file:*),Bash(git ls-files:*),Bash(git ls-tree:*),Bash(git describe:*),Bash(git shortlog:*),Bash(git name-rev:*),Bash(git --no-pager:*),Bash(readtags:*),Bash(cscope:*),Bash(rg:*),Bash(grep:*),Bash(sed:*),Bash(awk:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(uniq:*),Bash(cut:*),Bash(tr:*),Bash(nl:*),Bash(comm:*),Bash(diff:*),Bash(find:*),Bash(ls:*),Bash(cat:*),Bash(file:*),Bash(stat:*),Bash(xxd:*),Bash(od:*),Bash(strings:*),Bash(basename:*),Bash(dirname:*),Bash(jq:*),Bash(python3:*)"
+            --allowedTools "Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git fetch origin:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*),Bash(git merge-base:*),Bash(git grep:*),Bash(git rev-parse:*),Bash(git rev-list:*),Bash(git cat-file:*),Bash(git ls-files:*),Bash(git ls-tree:*),Bash(git describe:*),Bash(git shortlog:*),Bash(git name-rev:*),Bash(git --no-pager:*),Bash(readtags:*),Bash(cscope:*),Bash(rg:*),Bash(grep:*),Bash(sed:*),Bash(awk:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(uniq:*),Bash(cut:*),Bash(tr:*),Bash(nl:*),Bash(comm:*),Bash(diff:*),Bash(find:*),Bash(ls:*),Bash(cat:*),Bash(file:*),Bash(stat:*),Bash(xxd:*),Bash(od:*),Bash(strings:*),Bash(basename:*),Bash(dirname:*),Bash(jq:*),Bash(python3:*)"
 
       # Footer with cost/tokens/duration, summed across both passes. Generated
       # by the workflow, not the model, so the numbers can't be invented.
@@ -641,50 +651,55 @@ jobs:
       # `select` gives up on a SHA after MAX_ATTEMPTS of these, so one
       # transient failure still gets a retry.
       #
-      # But only count attempts where the review actually got to run. Hitting a
-      # Claude usage limit fails in seconds, and is a property of the account,
-      # not of this PR -- counting those would march down the queue abandoning
-      # every PR in it two ticks at a time. Same for a workflow-validation skip
-      # (this file not matching the default branch's copy), which the assertion
-      # after pass 1 turns into a failure in under a minute. A real per-PR
-      # failure (a timeout on a large diff) takes minutes, so elapsed time
-      # separates the two.
+      # Getting this wrong is expensive both ways. Charge the PR for an
+      # account-level blip and two of them retire it for good; refuse to charge
+      # a PR that genuinely cannot be reviewed and it blocks the queue head
+      # forever. So there are three signals, strongest first:
+      #
+      #   1. PR_FAULT -- a step already identified the fault as this PR's.
+      #      Deterministic, so a retry cannot help.
+      #   2. The execution log, via attempt.py. It answers the question
+      #      directly: no log at all means the model never ran (validation
+      #      skip, auth, usage limit); `error_max_turns` or real turns burnt
+      #      means the model engaged with this diff and still produced nothing.
+      #   3. Elapsed time, the original proxy, now only a fallback for when
+      #      the log is inconclusive. It assumed a fast failure is an account
+      #      problem -- true while Sonnet reviews took 4-13 minutes, but Opus
+      #      runs long enough that a transient API error twenty minutes in
+      #      looks exactly like a PR that is too hard.
       - name: Record failed attempt
         if: failure() && env.HEAD_SHA != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MIN_REAL_ATTEMPT_SECONDS: "120"
+          EXEC_FILE: ${{ env.PASS1_EXEC }},${{ steps.refute.outputs.execution_file }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
           started=${T0:-0}
           elapsed=0
           [ "$started" = "0" ] || elapsed=$(( $(date +%s) - started ))
 
-          # A step that identified the fault as this PR's own bypasses the
-          # timing heuristic entirely: it is deterministic, so a retry cannot
-          # help, and not counting it would block the queue behind this PR.
-          if [ -n "${PR_FAULT:-}" ]; then
-            echo "PR-specific fault after ${elapsed}s: $PR_FAULT"
+          # Record an attempt and stop. The title format is the contract
+          # select_prs.py reads: the "Review FAILED:" prefix plus the 12-char
+          # SHA is what counts against MAX_ATTEMPTS.
+          count_it() {
+            echo "counting a real attempt after ${elapsed}s: $1"
             gh label create review-failed --force >/dev/null 2>&1 || true
             gh issue create --repo "$GITHUB_REPOSITORY" \
               --title "Review FAILED: $UPSTREAM#${{ matrix.pr }} @ $HEAD_SHA" \
               --label review-failed \
-              --body "$PR_FAULT. Deterministic for this PR, so a retry will not help. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+              --body "$1
+          Elapsed: ${elapsed}s. Run: $RUN_URL"
             exit 0
-          fi
+          }
 
-          if [ "$started" = "0" ]; then
-            echo "failed before the review started -- not counting an attempt"
-            exit 0
-          fi
-          if [ "$elapsed" -lt "$MIN_REAL_ATTEMPT_SECONDS" ]; then
-            echo "review failed after ${elapsed}s -- too fast to be this PR's"
-            echo "fault (usage limit, auth, or infrastructure). Not counting an"
-            echo "attempt; this PR stays in the queue."
+          # Leave no record: the PR stays in the queue at full retry budget.
+          spare_it() {
+            echo "not counting an attempt after ${elapsed}s: $1"
             {
               echo "### $UPSTREAM#${{ matrix.pr }} not reviewed"
-              echo "Failed after ${elapsed}s — most likely a Claude usage limit,"
-              echo "or a workflow-validation skip if this ran off the default branch."
+              echo "$1"
               echo "The PR was **not** penalised and will be retried."
               echo ""
               echo "If this repeats, pause the drip:"
@@ -693,13 +708,32 @@ jobs:
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
             exit 0
+          }
+
+          # 1. A step that already identified the fault as this PR's own.
+          [ -n "${PR_FAULT:-}" ] && count_it "$PR_FAULT. Deterministic for this PR, so a retry will not help."
+
+          # 2. The execution log. `|| true` so a parsing bug degrades to the
+          # clock rather than failing the step under `set -e`.
+          verdict=""
+          if [ -f .harness/scripts/attempt.py ]; then
+            verdict=$(python3 .harness/scripts/attempt.py | sed -n 's/^verdict=//p') || true
           fi
-          echo "review failed after ${elapsed}s -- counting a real attempt"
-          gh label create review-failed --force >/dev/null 2>&1 || true
-          gh issue create --repo "$GITHUB_REPOSITORY" \
-            --title "Review FAILED: $UPSTREAM#${{ matrix.pr }} @ $HEAD_SHA" \
-            --label review-failed \
-            --body "Run did not produce a review after ${elapsed}s: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          case "$verdict" in
+            pr)
+              count_it "The execution log shows the model engaged with this diff and still produced no usable review."
+              ;;
+            infra)
+              spare_it "The execution log shows the model never ran (a workflow-validation skip, an auth failure, or a usage limit). Not this PR's fault."
+              ;;
+          esac
+
+          # 3. Fallback: the clock.
+          [ "$started" = "0" ] && spare_it "Failed before the review started."
+          if [ "$elapsed" -lt "$MIN_REAL_ATTEMPT_SECONDS" ]; then
+            spare_it "Failed after ${elapsed}s — too fast to be this PR's fault (most likely a Claude usage limit, auth, or infrastructure)."
+          fi
+          count_it "Run did not produce a review after ${elapsed}s, and the execution log was inconclusive."
 
       - uses: actions/upload-artifact@v5
         if: always()

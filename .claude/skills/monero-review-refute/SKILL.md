@@ -1,7 +1,7 @@
 ---
 name: monero-review-refute
 description: Adversarially verify the findings in an existing Monero PR review.
-allowed-tools: Read, Grep, Glob, Write, Edit, Skill, Bash(git diff:*), Bash(git fetch:*), Bash(git log:*), Bash(git show:*), Bash(git blame:*), Bash(git merge-base:*), Bash(git grep:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git cat-file:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git describe:*), Bash(git shortlog:*), Bash(git name-rev:*), Bash(git --no-pager:*), Bash(readtags:*), Bash(cscope:*), Bash(rg:*), Bash(grep:*), Bash(sed:*), Bash(awk:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(sort:*), Bash(uniq:*), Bash(cut:*), Bash(tr:*), Bash(nl:*), Bash(comm:*), Bash(diff:*), Bash(find:*), Bash(ls:*), Bash(cat:*), Bash(file:*), Bash(stat:*), Bash(xxd:*), Bash(od:*), Bash(strings:*), Bash(basename:*), Bash(dirname:*), Bash(jq:*), Bash(python3:*)
+allowed-tools: Read, Grep, Glob, Write, Edit, Skill, Bash(git diff:*), Bash(git fetch origin:*), Bash(git log:*), Bash(git show:*), Bash(git blame:*), Bash(git merge-base:*), Bash(git grep:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git cat-file:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git describe:*), Bash(git shortlog:*), Bash(git name-rev:*), Bash(git --no-pager:*), Bash(readtags:*), Bash(cscope:*), Bash(rg:*), Bash(grep:*), Bash(sed:*), Bash(awk:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(sort:*), Bash(uniq:*), Bash(cut:*), Bash(tr:*), Bash(nl:*), Bash(comm:*), Bash(diff:*), Bash(find:*), Bash(ls:*), Bash(cat:*), Bash(file:*), Bash(stat:*), Bash(xxd:*), Bash(od:*), Bash(strings:*), Bash(basename:*), Bash(dirname:*), Bash(jq:*), Bash(python3:*)
 ---
 
 A first-pass security review of this pull request has already been written to
@@ -116,9 +116,12 @@ Two more turn-wasters worth knowing before you hit them:
   tree, but not the upstream commit range between the old and new hashes. A
   first-pass finding about what a bump changed is UNRESOLVED unless it is
   visible in the pinned source itself.
-- **`git fetch` is allowed but almost never needed.** `origin/base` and the PR
-  head were both fetched by the harness before pass 1 ran, and they are
-  complete. Use it only if a command genuinely fails on a missing object.
+- **`git fetch origin ...` is allowed but almost never needed.** `origin/base`,
+  the PR head and the submodules were all fetched by the harness before pass 1
+  ran, and they are complete. Use it only if a command genuinely fails on a
+  missing object. Only `origin` is permitted — fetching from an arbitrary host
+  is how an injection would exfiltrate from this sandbox, so there is no
+  legitimate reason for this pass to want it.
 
 ## Method, per finding
 
