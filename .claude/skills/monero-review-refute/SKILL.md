@@ -1,7 +1,7 @@
 ---
 name: monero-review-refute
 description: Adversarially verify the findings in an existing Monero PR review.
-allowed-tools: Read, Grep, Glob, Write, Edit, Skill, Bash(git diff:*), Bash(git fetch origin:*), Bash(git log:*), Bash(git show:*), Bash(git merge-base:*), Bash(git grep:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git cat-file:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git describe:*), Bash(git shortlog:*), Bash(git name-rev:*), Bash(git --no-pager:*), Bash(readtags:*), Bash(cscope:*), Bash(rg:*), Bash(grep:*), Bash(sed:*), Bash(awk:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(sort:*), Bash(uniq:*), Bash(cut:*), Bash(tr:*), Bash(nl:*), Bash(comm:*), Bash(diff:*), Bash(find:*), Bash(ls:*), Bash(cat:*), Bash(file:*), Bash(stat:*), Bash(xxd:*), Bash(od:*), Bash(strings:*), Bash(basename:*), Bash(dirname:*), Bash(jq:*), Bash(bc:*), Bash(shellcheck:*), Bash(g++ -E:*), Bash(weggli:*)
+allowed-tools: Read, Grep, Glob, Write, Edit, Skill, Bash(git diff:*), Bash(git fetch origin:*), Bash(git log:*), Bash(git show:*), Bash(git merge-base:*), Bash(git grep:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git cat-file:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git describe:*), Bash(git shortlog:*), Bash(git name-rev:*), Bash(git --no-pager:*), Bash(readtags:*), Bash(cscope:*), Bash(rg:*), Bash(grep:*), Bash(sed:*), Bash(awk:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(sort:*), Bash(uniq:*), Bash(cut:*), Bash(tr:*), Bash(nl:*), Bash(comm:*), Bash(diff:*), Bash(find:*), Bash(ls:*), Bash(cat:*), Bash(file:*), Bash(stat:*), Bash(xxd:*), Bash(od:*), Bash(strings:*), Bash(basename:*), Bash(dirname:*), Bash(jq:*), Bash(bc:*), Bash(shellcheck:*), Bash(g++ -E:*)
 ---
 
 A first-pass security review of this pull request has already been written to
@@ -66,7 +66,7 @@ CONFIRMED.
   serializer macros (preprocessor only; it does not compile or run anything),
   which is the one way to see what `KV_SERIALIZE` actually generates when a
   finding turns on the wire boundary. `shellcheck` covers a diff touching
-  `.sh`; `weggli` does semantic C/C++ patterns and is often absent. None is a
+  `.sh`. None is a
   requirement: if a tool you wanted is missing, the finding stays UNRESOLVED
   with the gap named, never REFUTED on the strength of a check you could not
   run.
@@ -106,6 +106,29 @@ Use it, though — for this pass it is worth real budget:
 An ACK, an approval, or "this was already reviewed upstream" refutes nothing.
 Those are opinions about the change, and the whole reason this review exists is
 that opinions miss things. Only a guard you have read refutes a finding.
+
+## "I could not check that" is a claim, not a hedge
+
+Objects arrive on demand in this checkout, so a command can fail with
+`upload-pack: not our ref <sha>` or a similar promisor error and succeed on the
+next attempt. **Retry once before you believe it.**
+
+Two published reviews have now reported that exact error as a permanent
+limitation and cut their own coverage accordingly, one of them explicitly
+saying it had re-checked. Neither reproduces — same commands, same PR, same
+head, `rc=0`, and the object named as unfetchable turned out to be a readable
+blob. That is a false statement in a security report, and it is your job to
+catch it.
+
+So: when the first pass says a check was impossible, treat that exactly like
+any other unverified assertion. Try the command yourself. If it works, the
+first pass's coverage gap was imaginary and the claim that rested on it needs
+re-deriving — which may turn an UNRESOLVED into a CONFIRMED or a REFUTED. If it
+genuinely fails twice, say so with the exact command and error.
+
+`PR_SUBMODULES.md`, when present, already contains the submodule pins, the
+commit range and the URLs — so "the submodule range was unreadable" is not a
+gap you should accept without opening that file.
 
 ## History is cheap or it hangs
 

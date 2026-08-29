@@ -369,6 +369,45 @@ jobs:
           } > PR_HISTORY.md
           echo "history: $(wc -l < PR_HISTORY.md) lines"
 
+      # What this PR does to its submodules, computed here because the
+      # sandbox cannot: `git -C <submodule>` is not allowlisted, and run 122's
+      # single refused tool call was the reviewer reaching for exactly that on
+      # PR 9559, which ADDS external/mx25519 from a personal fork. Issue #203
+      # then had to record the commit range as uncheckable. A submodule bump
+      # is a supply-chain change, so the range is the review.
+      #
+      # git computes it natively with --submodule=log: a bump prints the
+      # intervening commit subjects, an addition prints "(new submodule)".
+      # Commit subjects are author-supplied, so fence and marker-strip.
+      - name: Summarise submodule changes
+        run: |
+          set -u
+          if ! git diff origin/base...HEAD --raw 2>/dev/null | grep -q '160000'; then
+            echo "submodules: unchanged by this PR"
+            exit 0
+          fi
+          {
+            echo "This pull request changes one or more git submodules."
+            echo
+            echo "A submodule bump is a supply-chain change: the pinned tree is"
+            echo "readable in external/, and the commits between the old and new"
+            echo "pins are listed below. Review them."
+            echo
+            echo "UNTRUSTED: commit subjects and URLs are author-supplied."
+            echo
+            echo "----- BEGIN AUTHOR-SUPPLIED TEXT -----"
+            git diff origin/base...HEAD --submodule=log 2>/dev/null |
+              awk '/^Submodule /{p=1} /^diff --git/{p=0} p' |
+              head -120 |
+              sed 's/-\{3,\} *\(BEGIN\|END\) [A-Z -]*TEXT *-\{3,\}/[marker stripped]/g'
+            echo
+            echo "## Configured URLs"
+            git config -f .gitmodules --get-regexp '^submodule\..*\.url$' 2>/dev/null |
+              head -20 || echo "(no .gitmodules)"
+            echo "----- END AUTHOR-SUPPLIED TEXT -----"
+          } > PR_SUBMODULES.md
+          echo "submodules: $(wc -l < PR_SUBMODULES.md) lines written"
+
       # The skill lives in this repo, not in Monero. Graft it onto the checkout.
       - name: Add the review skill
         uses: actions/checkout@v6
@@ -426,18 +465,12 @@ jobs:
             libzmq3-dev libprotobuf-dev libhidapi-dev libusb-1.0-0-dev \
             libunwind-dev || true
 
-          # weggli: semantic pattern matching for C/C++, tolerant of code that
-          # does not compile. UNVERIFIED -- the asset name below was not tested
-          # before shipping, so this may simply no-op. That is why it is
-          # non-fatal and why TOOLING.md reports the outcome: check there
-          # before assuming it ran. Third-party binary from the weggli-rs
-          # project; if you would rather not pull one, delete this block and
-          # the tool is reported absent.
-          if curl -fsSL --max-time 90 -o /tmp/weggli.tgz \
-               "https://github.com/weggli-rs/weggli/releases/latest/download/weggli-x86_64-unknown-linux-gnu.tar.gz" 2>/dev/null; then
-            sudo tar -xzf /tmp/weggli.tgz -C /usr/local/bin 2>/dev/null || true
-            sudo chmod +x /usr/local/bin/weggli 2>/dev/null || true
-          fi
+          # weggli was tried here and REMOVED. The release asset URL was a
+          # guess shipped without verification, and run 122 confirmed it never
+          # installed (TOOLING.md reported "weggli: NOT AVAILABLE"). Rather
+          # than ship a second guess, it is gone. To re-add it, verify the
+          # asset name against the weggli-rs releases page first and check
+          # TOOLING.md on the next run -- do not assume it worked.
 
           {
             echo "Optional analysis tools available in this checkout."
@@ -445,7 +478,7 @@ jobs:
             echo "Each is a TOOL, not a requirement. A missing one is never a"
             echo "reason to skip a check -- fall back and say so in the report."
             echo
-            for t in ctags readtags cscope rg bc shellcheck g++ weggli; do
+            for t in ctags readtags cscope rg bc shellcheck g++; do
               if command -v "$t" >/dev/null 2>&1; then
                 printf -- '- %s: available\n' "$t"
               else
@@ -480,7 +513,7 @@ jobs:
           claude_args: |
             --model ${{ inputs.model || env.DEFAULT_MODEL }}
             --max-turns 200
-            --allowedTools "Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git fetch origin:*),Bash(git log:*),Bash(git show:*),Bash(git merge-base:*),Bash(git grep:*),Bash(git rev-parse:*),Bash(git rev-list:*),Bash(git cat-file:*),Bash(git ls-files:*),Bash(git ls-tree:*),Bash(git describe:*),Bash(git shortlog:*),Bash(git name-rev:*),Bash(git --no-pager:*),Bash(readtags:*),Bash(cscope:*),Bash(rg:*),Bash(grep:*),Bash(sed:*),Bash(awk:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(uniq:*),Bash(cut:*),Bash(tr:*),Bash(nl:*),Bash(comm:*),Bash(diff:*),Bash(find:*),Bash(ls:*),Bash(cat:*),Bash(file:*),Bash(stat:*),Bash(xxd:*),Bash(od:*),Bash(strings:*),Bash(basename:*),Bash(dirname:*),Bash(jq:*),Bash(bc:*),Bash(shellcheck:*),Bash(g++ -E:*),Bash(weggli:*)"
+            --allowedTools "Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git fetch origin:*),Bash(git log:*),Bash(git show:*),Bash(git merge-base:*),Bash(git grep:*),Bash(git rev-parse:*),Bash(git rev-list:*),Bash(git cat-file:*),Bash(git ls-files:*),Bash(git ls-tree:*),Bash(git describe:*),Bash(git shortlog:*),Bash(git name-rev:*),Bash(git --no-pager:*),Bash(readtags:*),Bash(cscope:*),Bash(rg:*),Bash(grep:*),Bash(sed:*),Bash(awk:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(uniq:*),Bash(cut:*),Bash(tr:*),Bash(nl:*),Bash(comm:*),Bash(diff:*),Bash(find:*),Bash(ls:*),Bash(cat:*),Bash(file:*),Bash(stat:*),Bash(xxd:*),Bash(od:*),Bash(strings:*),Bash(basename:*),Bash(dirname:*),Bash(jq:*),Bash(bc:*),Bash(shellcheck:*),Bash(g++ -E:*)"
 
       # NB: this list is the one that BINDS. The `allowed-tools:` line in
       # each skill's frontmatter is documentation, and review-local.sh carries
@@ -577,7 +610,7 @@ jobs:
           claude_args: |
             --model ${{ inputs.model || env.DEFAULT_MODEL }}
             --max-turns 200
-            --allowedTools "Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git fetch origin:*),Bash(git log:*),Bash(git show:*),Bash(git merge-base:*),Bash(git grep:*),Bash(git rev-parse:*),Bash(git rev-list:*),Bash(git cat-file:*),Bash(git ls-files:*),Bash(git ls-tree:*),Bash(git describe:*),Bash(git shortlog:*),Bash(git name-rev:*),Bash(git --no-pager:*),Bash(readtags:*),Bash(cscope:*),Bash(rg:*),Bash(grep:*),Bash(sed:*),Bash(awk:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(uniq:*),Bash(cut:*),Bash(tr:*),Bash(nl:*),Bash(comm:*),Bash(diff:*),Bash(find:*),Bash(ls:*),Bash(cat:*),Bash(file:*),Bash(stat:*),Bash(xxd:*),Bash(od:*),Bash(strings:*),Bash(basename:*),Bash(dirname:*),Bash(jq:*),Bash(bc:*),Bash(shellcheck:*),Bash(g++ -E:*),Bash(weggli:*)"
+            --allowedTools "Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git fetch origin:*),Bash(git log:*),Bash(git show:*),Bash(git merge-base:*),Bash(git grep:*),Bash(git rev-parse:*),Bash(git rev-list:*),Bash(git cat-file:*),Bash(git ls-files:*),Bash(git ls-tree:*),Bash(git describe:*),Bash(git shortlog:*),Bash(git name-rev:*),Bash(git --no-pager:*),Bash(readtags:*),Bash(cscope:*),Bash(rg:*),Bash(grep:*),Bash(sed:*),Bash(awk:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(uniq:*),Bash(cut:*),Bash(tr:*),Bash(nl:*),Bash(comm:*),Bash(diff:*),Bash(find:*),Bash(ls:*),Bash(cat:*),Bash(file:*),Bash(stat:*),Bash(xxd:*),Bash(od:*),Bash(strings:*),Bash(basename:*),Bash(dirname:*),Bash(jq:*),Bash(bc:*),Bash(shellcheck:*),Bash(g++ -E:*)"
 
       # Footer with cost/tokens/duration, summed across both passes. Generated
       # by the workflow, not the model, so the numbers can't be invented.

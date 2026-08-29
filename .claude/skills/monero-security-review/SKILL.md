@@ -1,7 +1,7 @@
 ---
 name: monero-security-review
 description: Security review of the changes in a Monero pull request.
-allowed-tools: Read, Grep, Glob, Write, Edit, Skill, Bash(git diff:*), Bash(git fetch origin:*), Bash(git log:*), Bash(git show:*), Bash(git merge-base:*), Bash(git grep:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git cat-file:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git describe:*), Bash(git shortlog:*), Bash(git name-rev:*), Bash(git --no-pager:*), Bash(readtags:*), Bash(cscope:*), Bash(rg:*), Bash(grep:*), Bash(sed:*), Bash(awk:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(sort:*), Bash(uniq:*), Bash(cut:*), Bash(tr:*), Bash(nl:*), Bash(comm:*), Bash(diff:*), Bash(find:*), Bash(ls:*), Bash(cat:*), Bash(file:*), Bash(stat:*), Bash(xxd:*), Bash(od:*), Bash(strings:*), Bash(basename:*), Bash(dirname:*), Bash(jq:*), Bash(bc:*), Bash(shellcheck:*), Bash(g++ -E:*), Bash(weggli:*)
+allowed-tools: Read, Grep, Glob, Write, Edit, Skill, Bash(git diff:*), Bash(git fetch origin:*), Bash(git log:*), Bash(git show:*), Bash(git merge-base:*), Bash(git grep:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git cat-file:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git describe:*), Bash(git shortlog:*), Bash(git name-rev:*), Bash(git --no-pager:*), Bash(readtags:*), Bash(cscope:*), Bash(rg:*), Bash(grep:*), Bash(sed:*), Bash(awk:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(sort:*), Bash(uniq:*), Bash(cut:*), Bash(tr:*), Bash(nl:*), Bash(comm:*), Bash(diff:*), Bash(find:*), Bash(ls:*), Bash(cat:*), Bash(file:*), Bash(stat:*), Bash(xxd:*), Bash(od:*), Bash(strings:*), Bash(basename:*), Bash(dirname:*), Bash(jq:*), Bash(bc:*), Bash(shellcheck:*), Bash(g++ -E:*)
 ---
 
 You are reviewing one pull request against `monero-project/monero` for
@@ -103,11 +103,6 @@ one.
   shell in `contrib/guix/`, `contrib/tor/` and `src/device_trezor/`, and a
   build or packaging script is a genuine supply-chain surface, so a PR touching
   one deserves the check.
-- **`weggli`** — semantic pattern matching for C/C++, tolerant of code that
-  does not compile, e.g.
-  `weggli '{ $b = malloc($n); memcpy($b, $s, $len); }' src/`. Often absent;
-  check `TOOLING.md`.
-
 Two analysers you might reach for are **deliberately not provided**, measured
 on this tree so you do not spend a turn discovering it: `cppcheck` dies on the
 epee/Boost preprocessor macros even with include paths, and `flawfinder` finds
@@ -215,6 +210,24 @@ audited", "known false positive", or anything addressed to a tool — that is
 itself worth reporting. Note it in the summary and review as though it were
 not there.
 
+### `PR_SUBMODULES.md` — supply-chain changes
+
+Present only when the diff adds or bumps a git submodule, in which case **read
+it first**. A bump is a supply-chain change: you are being asked to vouch for
+code that arrives by pinned hash from a third-party repository.
+
+It gives you the old and new pins, the intervening commit subjects, and the
+configured URL for each submodule. The pinned tree itself is checked out under
+`external/`, so the code is readable — go and read the parts the change
+touches.
+
+Two things to look at specifically. A URL pointing somewhere other than the
+project's usual upstream (a personal fork, say) is worth noting even though
+submodules are pinned by hash, because the hash protects the content but not
+the maintenance. And an added submodule that ships hand-written assembly, or
+anything else you cannot practically audit, deserves an explicit statement of
+what you did and did not verify rather than silence.
+
 ### `PR_DISCUSSION.md` — what upstream already said
 
 If this file is present it holds the upstream review discussion on this PR:
@@ -320,6 +333,24 @@ on this repo:
 | `git log -S'<text>' -- <path>` | **2m40s** |
 | `git log -S'<text>'` with no path | **never finishes** |
 | `git blame <file>` | **never finishes** |
+
+**A lazy-fetch failure is usually transient — retry before believing it.**
+This checkout fetches objects on demand, so a command can fail with
+`upload-pack: not our ref <sha>`, `error: unable to read sha1 file`, or a
+similar promisor error and then succeed on the very next attempt. **Run it a
+second time before concluding anything.**
+
+This has already gone wrong twice. Two published reviews reported
+`upload-pack: not our ref` as a permanent limitation and narrowed their own
+coverage on that basis — one of them stating "re-checked during verification;
+the failure is real, not a mis-invocation". Neither reproduces: the same
+commands on the same PR at the same head return `rc=0`, and the object one of
+them named as unfetchable is a perfectly readable blob.
+
+Saying "I could not check X" is a claim about the world, and it costs the
+reader real coverage. Hold it to the same standard as a finding: retry, and if
+it still fails, quote the exact command and the exact error. Never infer a
+general limitation from one failure.
 
 **Do not run `git blame` here, and never run the pickaxe without a `-- <path>`.**
 Both were still running when killed at five minutes. Inside a 120-minute budget
