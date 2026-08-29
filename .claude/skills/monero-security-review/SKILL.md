@@ -1,7 +1,7 @@
 ---
 name: monero-security-review
 description: Security review of the changes in a Monero pull request.
-allowed-tools: Read, Grep, Glob, Write, Edit, Skill, Bash(git diff:*), Bash(git fetch origin:*), Bash(git log:*), Bash(git show:*), Bash(git merge-base:*), Bash(git grep:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git cat-file:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git describe:*), Bash(git shortlog:*), Bash(git name-rev:*), Bash(git --no-pager:*), Bash(readtags:*), Bash(cscope:*), Bash(rg:*), Bash(grep:*), Bash(sed:*), Bash(awk:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(sort:*), Bash(uniq:*), Bash(cut:*), Bash(tr:*), Bash(nl:*), Bash(comm:*), Bash(diff:*), Bash(find:*), Bash(ls:*), Bash(cat:*), Bash(file:*), Bash(stat:*), Bash(xxd:*), Bash(od:*), Bash(strings:*), Bash(basename:*), Bash(dirname:*), Bash(jq:*)
+allowed-tools: Read, Grep, Glob, Write, Edit, Skill, Bash(git diff:*), Bash(git fetch origin:*), Bash(git log:*), Bash(git show:*), Bash(git merge-base:*), Bash(git grep:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git cat-file:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git describe:*), Bash(git shortlog:*), Bash(git name-rev:*), Bash(git --no-pager:*), Bash(readtags:*), Bash(cscope:*), Bash(rg:*), Bash(grep:*), Bash(sed:*), Bash(awk:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(sort:*), Bash(uniq:*), Bash(cut:*), Bash(tr:*), Bash(nl:*), Bash(comm:*), Bash(diff:*), Bash(find:*), Bash(ls:*), Bash(cat:*), Bash(file:*), Bash(stat:*), Bash(xxd:*), Bash(od:*), Bash(strings:*), Bash(basename:*), Bash(dirname:*), Bash(jq:*), Bash(bc:*), Bash(shellcheck:*), Bash(g++ -E:*), Bash(weggli:*)
 ---
 
 You are reviewing one pull request against `monero-project/monero` for
@@ -39,23 +39,79 @@ the usual text utilities (`rg`, `grep`, `sed`, `awk`, `head`, `tail`, `wc`,
 `sort`, `uniq`, `cut`, `tr`, `nl`, `comm`, `diff`, `find`, `ls`, `cat`, `file`,
 `stat`, `xxd`, `od`, `strings`, `jq`).
 
-**There is no interpreter, and arithmetic is yours to do carefully.** `python3`
-is deliberately not available: a general interpreter can open network sockets,
-and this sandbox holds credentials that must not leave it. Nothing about
-reading a diff needs one.
+**Use `bc` for arithmetic, never `awk`.** Overflow claims are the easiest
+finding to get wrong in both directions, so compute them rather than eyeball
+them — but with the right tool. `bc` is arbitrary precision and exact:
 
-That matters most for overflow claims, which are the easiest finding to get
-wrong in both directions. Do not reach for `awk` to settle one — it computes in
-double precision and silently rounds above 2^53, so it will cheerfully agree
-that two unequal 64-bit numbers are equal. Measured: `awk 'BEGIN{print 2^64-1}'`
-prints `18446744073709551616`, which is 2^64, not 2^64-1.
+```
+echo '2^64 - 1' | bc                    18446744073709551615
+echo '2^53 + 1' | bc                    9007199254740993
+echo '4096*4096*4096 > 2^32 - 1' | bc   1        (1 = yes, it overflows)
+echo 'ibase=16; FFFFFFFF' | bc          4294967295
+```
 
-So work an overflow claim symbolically and **show it in the finding**: name the
+`awk` computes in double precision and silently rounds above 2^53, so it will
+cheerfully agree that two unequal 64-bit numbers are equal. Measured:
+`awk 'BEGIN{print 2^64-1}'` prints `18446744073709551616`, which is 2^64, not
+2^64-1 — and an equality test against the true value returns true, because both
+sides round to the same double. That is exactly how a false overflow finding
+gets "confirmed". Do not use it for this.
+
+`python3` is deliberately absent: a general interpreter can open network
+sockets and this sandbox holds credentials. `bc` cannot — it is a calculator
+language with no file writes, no exec and no network, which is why it is here
+and python3 is not.
+
+Whichever way you get the number, **show the working in the finding**: the
 declared type and its exact width, the operands and where each comes from, the
 product or sum, and the bound it crosses. `size_t` (64-bit) vs `uint32_t` is
-usually the whole argument, and powers of two are exact when written out.
-Writing it down is also what lets the engineer reading your report check you —
-a bare assertion that something overflows is not a finding.
+usually the whole argument. A bare assertion that something overflows is not a
+finding, and the engineer reading your report has to be able to check you.
+
+### Optional tools — read `TOOLING.md` first
+
+`TOOLING.md` lists which optional tools this run actually has. Read it rather
+than probing for binaries; a tool that failed to install is reported there as
+`NOT AVAILABLE`.
+
+**None of them is a requirement.** A missing tool is never a reason to skip a
+check — fall back to reading the code and say in the report which tool you did
+not have. The report is worth more with an honest gap in it than with a silent
+one.
+
+- **`g++ -E` — expand the macros.** Monero is macro-dense, and the serializer
+  macros generate the code at the wire-deserialisation boundary, which is both
+  your highest-value trust boundary and the place grep is least reliable.
+
+  ```
+  g++ -E -I contrib/epee/include -I src -I external/easylogging++ -std=c++17 \
+      src/rpc/core_rpc_server_commands_defs.h | grep -o 'selector<[^>]*>::serialize[^(]*'
+  ```
+
+  **Expand a file that USES the macro, not the one that defines it.** Expanding
+  `keyvalue_serialization.h` shows you the definitions and nothing else;
+  expanding a command-defs header that invokes `KV_SERIALIZE` is what reveals
+  the generated `epee::serialization::selector<...>::serialize` calls —
+  including which fields go through `serialize_stl_container_pod_val_as_blob`,
+  which is where an attacker-chosen length lands.
+
+  This runs **only the preprocessor** — it does not compile, link or execute
+  anything. Output is enormous (282k lines for that header), so always pipe it
+  through `grep`. It may fail on a missing header; that is fine and expected,
+  it is a tool and not a requirement.
+- **`shellcheck`** — when the diff touches a `.sh` file. Monero ships real
+  shell in `contrib/guix/`, `contrib/tor/` and `src/device_trezor/`, and a
+  build or packaging script is a genuine supply-chain surface, so a PR touching
+  one deserves the check.
+- **`weggli`** — semantic pattern matching for C/C++, tolerant of code that
+  does not compile, e.g.
+  `weggli '{ $b = malloc($n); memcpy($b, $s, $len); }' src/`. Often absent;
+  check `TOOLING.md`.
+
+Two analysers you might reach for are **deliberately not provided**, measured
+on this tree so you do not spend a turn discovering it: `cppcheck` dies on the
+epee/Boost preprocessor macros even with include paths, and `flawfinder` finds
+nothing here because it targets legacy C functions this codebase does not use.
 
 **Pipes work.** `git diff origin/base...HEAD | wc -l`, `sed -n '100,200p' f.cpp
 | grep -n free`, `cscope -d -L3 fn | head -40` are all fine — use them freely.

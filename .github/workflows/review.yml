@@ -384,18 +384,88 @@ jobs:
           rm -rf .claude
           cp -r .harness/.claude .claude
 
+      # TOOLS, NOT REQUIREMENTS. Every install here is best-effort and the
+      # whole step is non-fatal: a flaky apt mirror must never cost a review.
+      # What actually landed is written to TOOLING.md so the reviewer reads
+      # the answer instead of spending turns probing for binaries.
+      #
+      # Nothing here compiles, links, or executes anything from the PR. ctags
+      # and cscope parse source text; `g++ -E` runs only the preprocessor,
+      # which substitutes text; the rest are analysers that read files.
+      #
+      # Two well-known analysers are deliberately ABSENT, measured on this
+      # tree rather than assumed:
+      #   cppcheck   -- dies on epee/Boost preprocessor macros even with the
+      #                 include paths ("unknownMacro: BEGIN_URI_MAP2", then
+      #                 BOOST_PP_STRINGIZE). Monero's macro density defeats it.
+      #   flawfinder -- zero findings at level 3 across two large changed
+      #                 files. It hunts legacy C (strcpy/sprintf); this is
+      #                 modern C++.
+      # The skills say so, so nobody re-derives it or asks for them.
+      - name: Install review tools
+        continue-on-error: true
+        timeout-minutes: 10
+        run: |
+          set -u
+          sudo apt-get update -qq || true
+
+          # Index, search, and the analysers that actually work here.
+          # ripgrep was allowlisted but never installed -- the runner image
+          # happens to ship it, which is not a guarantee. Pin it down.
+          sudo apt-get install -y -qq \
+            universal-ctags cscope ripgrep bc shellcheck || true
+
+          # Headers only, so `g++ -E` can expand macros. This is NOT a build:
+          # the preprocessor does text substitution and stops. It matters
+          # because KV_SERIALIZE / BEGIN_SERIALIZE_OBJECT generate the code at
+          # the wire-deserialisation boundary -- the highest-value trust
+          # boundary in the tree, and the one place grep is least reliable.
+          # Same package set monero's own CI installs.
+          sudo apt-get install -y -qq \
+            libboost-dev libsodium-dev libssl-dev libunbound-dev \
+            libzmq3-dev libprotobuf-dev libhidapi-dev libusb-1.0-0-dev \
+            libunwind-dev || true
+
+          # weggli: semantic pattern matching for C/C++, tolerant of code that
+          # does not compile. UNVERIFIED -- the asset name below was not tested
+          # before shipping, so this may simply no-op. That is why it is
+          # non-fatal and why TOOLING.md reports the outcome: check there
+          # before assuming it ran. Third-party binary from the weggli-rs
+          # project; if you would rather not pull one, delete this block and
+          # the tool is reported absent.
+          if curl -fsSL --max-time 90 -o /tmp/weggli.tgz \
+               "https://github.com/weggli-rs/weggli/releases/latest/download/weggli-x86_64-unknown-linux-gnu.tar.gz" 2>/dev/null; then
+            sudo tar -xzf /tmp/weggli.tgz -C /usr/local/bin 2>/dev/null || true
+            sudo chmod +x /usr/local/bin/weggli 2>/dev/null || true
+          fi
+
+          {
+            echo "Optional analysis tools available in this checkout."
+            echo
+            echo "Each is a TOOL, not a requirement. A missing one is never a"
+            echo "reason to skip a check -- fall back and say so in the report."
+            echo
+            for t in ctags readtags cscope rg bc shellcheck g++ weggli; do
+              if command -v "$t" >/dev/null 2>&1; then
+                printf -- '- %s: available\n' "$t"
+              else
+                printf -- '- %s: NOT AVAILABLE\n' "$t"
+              fi
+            done
+            echo
+            echo "Deliberately absent, measured on this tree:"
+            echo "- cppcheck: dies on epee/Boost macros, even with include paths."
+            echo "- flawfinder: finds nothing here; it targets legacy C."
+          } > TOOLING.md
+          cat TOOLING.md
+
       # Precise cross-reference beats grep for "who calls this", which is the
-      # load-bearing claim in every finding. ctags/cscope parse source text
-      # only -- nothing from the PR is configured, compiled, or executed.
-      # Non-fatal: a flaky apt mirror must not cost a whole review. The skill
-      # detects a missing index and says so rather than claiming reachability
-      # it could not verify.
+      # load-bearing claim in every finding. Non-fatal for the same reason:
+      # the skill detects a missing index and says so rather than claiming
+      # reachability it could not verify.
       - name: Build symbol index
         continue-on-error: true
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq universal-ctags cscope
-          bash .harness/scripts/build_index.sh .
+        run: bash .harness/scripts/build_index.sh .
 
       - run: echo "T0=$(date +%s)" >> "$GITHUB_ENV"
 
@@ -410,7 +480,7 @@ jobs:
           claude_args: |
             --model ${{ inputs.model || env.DEFAULT_MODEL }}
             --max-turns 200
-            --allowedTools "Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git fetch origin:*),Bash(git log:*),Bash(git show:*),Bash(git merge-base:*),Bash(git grep:*),Bash(git rev-parse:*),Bash(git rev-list:*),Bash(git cat-file:*),Bash(git ls-files:*),Bash(git ls-tree:*),Bash(git describe:*),Bash(git shortlog:*),Bash(git name-rev:*),Bash(git --no-pager:*),Bash(readtags:*),Bash(cscope:*),Bash(rg:*),Bash(grep:*),Bash(sed:*),Bash(awk:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(uniq:*),Bash(cut:*),Bash(tr:*),Bash(nl:*),Bash(comm:*),Bash(diff:*),Bash(find:*),Bash(ls:*),Bash(cat:*),Bash(file:*),Bash(stat:*),Bash(xxd:*),Bash(od:*),Bash(strings:*),Bash(basename:*),Bash(dirname:*),Bash(jq:*)"
+            --allowedTools "Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git fetch origin:*),Bash(git log:*),Bash(git show:*),Bash(git merge-base:*),Bash(git grep:*),Bash(git rev-parse:*),Bash(git rev-list:*),Bash(git cat-file:*),Bash(git ls-files:*),Bash(git ls-tree:*),Bash(git describe:*),Bash(git shortlog:*),Bash(git name-rev:*),Bash(git --no-pager:*),Bash(readtags:*),Bash(cscope:*),Bash(rg:*),Bash(grep:*),Bash(sed:*),Bash(awk:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(uniq:*),Bash(cut:*),Bash(tr:*),Bash(nl:*),Bash(comm:*),Bash(diff:*),Bash(find:*),Bash(ls:*),Bash(cat:*),Bash(file:*),Bash(stat:*),Bash(xxd:*),Bash(od:*),Bash(strings:*),Bash(basename:*),Bash(dirname:*),Bash(jq:*),Bash(bc:*),Bash(shellcheck:*),Bash(g++ -E:*),Bash(weggli:*)"
 
       # NB: this list is the one that BINDS. The `allowed-tools:` line in
       # each skill's frontmatter is documentation, and review-local.sh carries
@@ -507,7 +577,7 @@ jobs:
           claude_args: |
             --model ${{ inputs.model || env.DEFAULT_MODEL }}
             --max-turns 200
-            --allowedTools "Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git fetch origin:*),Bash(git log:*),Bash(git show:*),Bash(git merge-base:*),Bash(git grep:*),Bash(git rev-parse:*),Bash(git rev-list:*),Bash(git cat-file:*),Bash(git ls-files:*),Bash(git ls-tree:*),Bash(git describe:*),Bash(git shortlog:*),Bash(git name-rev:*),Bash(git --no-pager:*),Bash(readtags:*),Bash(cscope:*),Bash(rg:*),Bash(grep:*),Bash(sed:*),Bash(awk:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(uniq:*),Bash(cut:*),Bash(tr:*),Bash(nl:*),Bash(comm:*),Bash(diff:*),Bash(find:*),Bash(ls:*),Bash(cat:*),Bash(file:*),Bash(stat:*),Bash(xxd:*),Bash(od:*),Bash(strings:*),Bash(basename:*),Bash(dirname:*),Bash(jq:*)"
+            --allowedTools "Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git fetch origin:*),Bash(git log:*),Bash(git show:*),Bash(git merge-base:*),Bash(git grep:*),Bash(git rev-parse:*),Bash(git rev-list:*),Bash(git cat-file:*),Bash(git ls-files:*),Bash(git ls-tree:*),Bash(git describe:*),Bash(git shortlog:*),Bash(git name-rev:*),Bash(git --no-pager:*),Bash(readtags:*),Bash(cscope:*),Bash(rg:*),Bash(grep:*),Bash(sed:*),Bash(awk:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(uniq:*),Bash(cut:*),Bash(tr:*),Bash(nl:*),Bash(comm:*),Bash(diff:*),Bash(find:*),Bash(ls:*),Bash(cat:*),Bash(file:*),Bash(stat:*),Bash(xxd:*),Bash(od:*),Bash(strings:*),Bash(basename:*),Bash(dirname:*),Bash(jq:*),Bash(bc:*),Bash(shellcheck:*),Bash(g++ -E:*),Bash(weggli:*)"
 
       # Footer with cost/tokens/duration, summed across both passes. Generated
       # by the workflow, not the model, so the numbers can't be invented.

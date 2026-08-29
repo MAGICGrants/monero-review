@@ -169,11 +169,35 @@ cp -r "$HERE/.claude" "$CACHE/.claude"
   echo "----- END AUTHOR-SUPPLIED TEXT -----"
 } > "$CACHE/PR_HISTORY.md"
 
+# Which optional tools this machine has. Tools, not requirements: the skills
+# read this and fall back rather than assuming. Install what you want with
+#   sudo apt install universal-ctags cscope ripgrep bc shellcheck
+# and, for `g++ -E` macro expansion, the header packages monero's CI uses
+#   sudo apt install libboost-dev libsodium-dev libssl-dev libunbound-dev
+{
+  echo "Optional analysis tools available in this checkout."
+  echo
+  echo "Each is a TOOL, not a requirement. A missing one is never a"
+  echo "reason to skip a check -- fall back and say so in the report."
+  echo
+  for t in ctags readtags cscope rg bc shellcheck g++ weggli; do
+    if command -v "$t" >/dev/null 2>&1; then
+      printf -- '- %s: available\n' "$t"
+    else
+      printf -- '- %s: NOT AVAILABLE\n' "$t"
+    fi
+  done
+  echo
+  echo "Deliberately absent, measured on this tree:"
+  echo "- cppcheck: dies on epee/Boost macros, even with include paths."
+  echo "- flawfinder: finds nothing here; it targets legacy C."
+} > "$CACHE/TOOLING.md"
+
 # Symbol index for precise cross-reference. Skipped silently if ctags/cscope
 # are absent -- `sudo apt install universal-ctags cscope` to enable.
 bash "$HERE/scripts/build_index.sh" "$CACHE"
 
-TOOLS="Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git fetch origin:*),Bash(git log:*),Bash(git show:*),Bash(git merge-base:*),Bash(git grep:*),Bash(git rev-parse:*),Bash(git rev-list:*),Bash(git cat-file:*),Bash(git ls-files:*),Bash(git ls-tree:*),Bash(git describe:*),Bash(git shortlog:*),Bash(git name-rev:*),Bash(git --no-pager:*),Bash(readtags:*),Bash(cscope:*),Bash(rg:*),Bash(grep:*),Bash(sed:*),Bash(awk:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(uniq:*),Bash(cut:*),Bash(tr:*),Bash(nl:*),Bash(comm:*),Bash(diff:*),Bash(find:*),Bash(ls:*),Bash(cat:*),Bash(file:*),Bash(stat:*),Bash(xxd:*),Bash(od:*),Bash(strings:*),Bash(basename:*),Bash(dirname:*),Bash(jq:*)"
+TOOLS="Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git fetch origin:*),Bash(git log:*),Bash(git show:*),Bash(git merge-base:*),Bash(git grep:*),Bash(git rev-parse:*),Bash(git rev-list:*),Bash(git cat-file:*),Bash(git ls-files:*),Bash(git ls-tree:*),Bash(git describe:*),Bash(git shortlog:*),Bash(git name-rev:*),Bash(git --no-pager:*),Bash(readtags:*),Bash(cscope:*),Bash(rg:*),Bash(grep:*),Bash(sed:*),Bash(awk:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(uniq:*),Bash(cut:*),Bash(tr:*),Bash(nl:*),Bash(comm:*),Bash(diff:*),Bash(find:*),Bash(ls:*),Bash(cat:*),Bash(file:*),Bash(stat:*),Bash(xxd:*),Bash(od:*),Bash(strings:*),Bash(basename:*),Bash(dirname:*),Bash(jq:*),Bash(bc:*),Bash(shellcheck:*),Bash(g++ -E:*),Bash(weggli:*)"
 
 rm -f "$CACHE/review.md" "$CACHE/exec.json" "$CACHE/exec-refute.json"
 echo "==> reviewing with $MODEL"
