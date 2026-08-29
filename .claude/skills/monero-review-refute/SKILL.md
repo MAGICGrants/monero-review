@@ -1,7 +1,7 @@
 ---
 name: monero-review-refute
 description: Adversarially verify the findings in an existing Monero PR review.
-allowed-tools: Read, Grep, Glob, Write, Edit, Skill, Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git blame:*), Bash(git merge-base:*), Bash(git grep:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git cat-file:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git describe:*), Bash(git shortlog:*), Bash(git name-rev:*), Bash(git --no-pager:*), Bash(readtags:*), Bash(cscope:*), Bash(rg:*), Bash(grep:*), Bash(sed:*), Bash(awk:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(sort:*), Bash(uniq:*), Bash(cut:*), Bash(tr:*), Bash(nl:*), Bash(comm:*), Bash(diff:*), Bash(find:*), Bash(ls:*), Bash(cat:*), Bash(file:*), Bash(stat:*), Bash(xxd:*), Bash(od:*), Bash(strings:*), Bash(basename:*), Bash(dirname:*), Bash(jq:*), Bash(python3:*)
+allowed-tools: Read, Grep, Glob, Write, Edit, Skill, Bash(git diff:*), Bash(git fetch:*), Bash(git log:*), Bash(git show:*), Bash(git blame:*), Bash(git merge-base:*), Bash(git grep:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git cat-file:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git describe:*), Bash(git shortlog:*), Bash(git name-rev:*), Bash(git --no-pager:*), Bash(readtags:*), Bash(cscope:*), Bash(rg:*), Bash(grep:*), Bash(sed:*), Bash(awk:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(sort:*), Bash(uniq:*), Bash(cut:*), Bash(tr:*), Bash(nl:*), Bash(comm:*), Bash(diff:*), Bash(find:*), Bash(ls:*), Bash(cat:*), Bash(file:*), Bash(stat:*), Bash(xxd:*), Bash(od:*), Bash(strings:*), Bash(basename:*), Bash(dirname:*), Bash(jq:*), Bash(python3:*)
 ---
 
 A first-pass security review of this pull request has already been written to
@@ -87,7 +87,7 @@ An ACK, an approval, or "this was already reviewed upstream" refutes nothing.
 Those are opinions about the change, and the whole reason this review exists is
 that opinions miss things. Only a guard you have read refutes a finding.
 
-## Writing files
+## Shell shape
 
 The Bash tool refuses `>` redirects, `&&`/`;` chains, and `$(...)` whatever the
 allowlist says. Pipes are fine and you should use them freely. When you need a
@@ -95,6 +95,23 @@ file written — and you do, since your deliverable is a rewritten `review.md` �
 use the `Write` and `Edit` tools, which have no such restriction. Prefer `Edit`
 for per-finding changes so you do not have to reproduce the whole report from
 memory each time.
+
+Two more turn-wasters worth knowing before you hit them:
+
+- **Stay inside the checkout.** `find /` and friends are refused by the sandbox
+  even though `find` is allowlisted — that is the filesystem boundary, not the
+  allowlist, and nothing you add to a command gets past it. Use
+  `git ls-files | grep <name>` to locate anything you cannot place.
+- **`external/rapidjson`, `external/randomx`, `external/supercop` and
+  `external/gtest` are empty.** They are submodules and the harness does not
+  clone them. So a first-pass finding resting on what one of those libraries
+  does is UNRESOLVED, not REFUTED: you cannot read the guard that would refute
+  it any more than pass 1 could read the bug. Say which library and what would
+  settle it. Do not refute such a finding by asserting the library handles it —
+  that is exactly the unread-guard move this pass exists to catch.
+- **`git fetch` is allowed but almost never needed.** `origin/base` and the PR
+  head were both fetched by the harness before pass 1 ran, and they are
+  complete. Use it only if a command genuinely fails on a missing object.
 
 ## Method, per finding
 

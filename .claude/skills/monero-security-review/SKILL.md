@@ -1,7 +1,7 @@
 ---
 name: monero-security-review
 description: Security review of the changes in a Monero pull request.
-allowed-tools: Read, Grep, Glob, Write, Edit, Skill, Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git blame:*), Bash(git merge-base:*), Bash(git grep:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git cat-file:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git describe:*), Bash(git shortlog:*), Bash(git name-rev:*), Bash(git --no-pager:*), Bash(readtags:*), Bash(cscope:*), Bash(rg:*), Bash(grep:*), Bash(sed:*), Bash(awk:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(sort:*), Bash(uniq:*), Bash(cut:*), Bash(tr:*), Bash(nl:*), Bash(comm:*), Bash(diff:*), Bash(find:*), Bash(ls:*), Bash(cat:*), Bash(file:*), Bash(stat:*), Bash(xxd:*), Bash(od:*), Bash(strings:*), Bash(basename:*), Bash(dirname:*), Bash(jq:*), Bash(python3:*)
+allowed-tools: Read, Grep, Glob, Write, Edit, Skill, Bash(git diff:*), Bash(git fetch:*), Bash(git log:*), Bash(git show:*), Bash(git blame:*), Bash(git merge-base:*), Bash(git grep:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git cat-file:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git describe:*), Bash(git shortlog:*), Bash(git name-rev:*), Bash(git --no-pager:*), Bash(readtags:*), Bash(cscope:*), Bash(rg:*), Bash(grep:*), Bash(sed:*), Bash(awk:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(sort:*), Bash(uniq:*), Bash(cut:*), Bash(tr:*), Bash(nl:*), Bash(comm:*), Bash(diff:*), Bash(find:*), Bash(ls:*), Bash(cat:*), Bash(file:*), Bash(stat:*), Bash(xxd:*), Bash(od:*), Bash(strings:*), Bash(basename:*), Bash(dirname:*), Bash(jq:*), Bash(python3:*)
 ---
 
 You are reviewing one pull request against `monero-project/monero` for
@@ -33,7 +33,8 @@ says.
 
 You have a wide set of read-only tools: git's inspection subcommands (`diff`,
 `log`, `show`, `blame`, `grep`, `rev-parse`, `rev-list`, `cat-file`, `ls-files`,
-`ls-tree`, `describe`, `shortlog`), the symbol index (`readtags`, `cscope`), and
+`ls-tree`, `describe`, `shortlog`, `fetch`), the symbol index (`readtags`,
+`cscope`), and
 the usual text utilities (`rg`, `grep`, `sed`, `awk`, `head`, `tail`, `wc`,
 `sort`, `uniq`, `cut`, `tr`, `nl`, `comm`, `diff`, `find`, `ls`, `cat`, `file`,
 `stat`, `xxd`, `od`, `strings`, `jq`), and `python3`.
@@ -47,6 +48,35 @@ refused inside the `-c` script the same as anywhere else.
 
 **Pipes work.** `git diff origin/base...HEAD | wc -l`, `sed -n '100,200p' f.cpp
 | grep -n free`, `cscope -d -L3 fn | head -40` are all fine — use them freely.
+
+**Search the checkout, not the filesystem.** `find /`, `find /usr`, and anything
+else reaching outside the working tree is refused by the sandbox even though
+`find` itself is allowed — the allowlist and the filesystem boundary are two
+different gates, and no allowlist entry gets you past the second. It costs a
+turn every time. `git ls-files | grep <name>` locates any tracked file in the
+tree and, unlike `find`, cannot wander off it.
+
+**Four dependencies are not in the checkout at all.** `external/rapidjson`,
+`external/randomx`, `external/supercop` and `external/gtest` are git
+submodules, and the harness clones without `--recurse-submodules`: those
+directories exist but are empty. The rest of `external/` (`db_drivers`,
+`easylogging++`, `qrcodegen`, `boost` shims) and all of `contrib/epee` are
+real files you can read.
+
+This matters twice. If a finding turns on what rapidjson's parser or RandomX
+actually does, **you cannot check it and must not pretend otherwise** — report
+the concern with an explicit note that the dependency source was unavailable,
+and do not hunt for it on the filesystem, because it is not there. And if the
+diff itself *bumps* one of these submodules, the change you have been given is
+a single gitlink hash with no readable content behind it: say plainly that the
+substance of the change could not be reviewed, name the old and new hashes, and
+do not file a clean report as though you had examined it.
+
+`git fetch` is allowed, but you should rarely want it. The harness has already
+fetched `origin/base` and the PR head before you start, and both are complete —
+if `git diff origin/base...HEAD` produces output, there is nothing missing and
+fetching again buys you nothing but wall-clock. Reach for it only if a command
+actually fails on a missing object.
 
 Three shell forms are refused no matter what, and each refusal costs you a turn
 for nothing:

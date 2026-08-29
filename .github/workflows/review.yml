@@ -11,11 +11,17 @@ on:
       model:
         description: "Model"
         required: false
-        default: claude-opus-5
+        # MUST match DEFAULT_MODEL below. This default only applies to a
+        # workflow_dispatch that omits the input; a `schedule` run has no
+        # inputs at all and falls through to DEFAULT_MODEL instead. When the
+        # two disagreed (dropdown claude-opus-5, fallback claude-sonnet-5) the
+        # UI advertised a model no scheduled run ever used, and the telemetry
+        # in every issue was the only place the truth appeared.
+        default: claude-sonnet-5
         type: choice
         options:
-          - claude-opus-5
           - claude-sonnet-5
+          - claude-opus-5
 
   # Twice an hour, off the top of the hour.
   #
@@ -41,6 +47,10 @@ on:
 
 env:
   UPSTREAM: monero-project/monero
+  # What a run gets when nothing names a model -- every `schedule` tick, and
+  # any dispatch that omits the input. Keep the `model:` input default above
+  # identical, or the dropdown lies about scheduled runs again.
+  DEFAULT_MODEL: claude-sonnet-5
   # Only consider PRs touched this recently. Upstream is busier than it looks:
   # measured 2026-08-26, the starting queue is ~22 PRs at 1 day, ~33 at 2,
   # ~42 at 3. Start at 1 so the first drain is survivable, then widen.
@@ -313,9 +323,9 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: "/monero-security-review"
           claude_args: |
-            --model ${{ inputs.model || 'claude-sonnet-5' }}
+            --model ${{ inputs.model || env.DEFAULT_MODEL }}
             --max-turns 200
-            --allowedTools "Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*),Bash(git merge-base:*),Bash(git grep:*),Bash(git rev-parse:*),Bash(git rev-list:*),Bash(git cat-file:*),Bash(git ls-files:*),Bash(git ls-tree:*),Bash(git describe:*),Bash(git shortlog:*),Bash(git name-rev:*),Bash(git --no-pager:*),Bash(readtags:*),Bash(cscope:*),Bash(rg:*),Bash(grep:*),Bash(sed:*),Bash(awk:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(uniq:*),Bash(cut:*),Bash(tr:*),Bash(nl:*),Bash(comm:*),Bash(diff:*),Bash(find:*),Bash(ls:*),Bash(cat:*),Bash(file:*),Bash(stat:*),Bash(xxd:*),Bash(od:*),Bash(strings:*),Bash(basename:*),Bash(dirname:*),Bash(jq:*),Bash(python3:*)"
+            --allowedTools "Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git fetch:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*),Bash(git merge-base:*),Bash(git grep:*),Bash(git rev-parse:*),Bash(git rev-list:*),Bash(git cat-file:*),Bash(git ls-files:*),Bash(git ls-tree:*),Bash(git describe:*),Bash(git shortlog:*),Bash(git name-rev:*),Bash(git --no-pager:*),Bash(readtags:*),Bash(cscope:*),Bash(rg:*),Bash(grep:*),Bash(sed:*),Bash(awk:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(uniq:*),Bash(cut:*),Bash(tr:*),Bash(nl:*),Bash(comm:*),Bash(diff:*),Bash(find:*),Bash(ls:*),Bash(cat:*),Bash(file:*),Bash(stat:*),Bash(xxd:*),Bash(od:*),Bash(strings:*),Bash(basename:*),Bash(dirname:*),Bash(jq:*),Bash(python3:*)"
 
       # NB: this list is the one that BINDS. The `allowed-tools:` line in
       # each skill's frontmatter is documentation, and review-local.sh carries
@@ -410,9 +420,9 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: "/monero-review-refute"
           claude_args: |
-            --model ${{ inputs.model || 'claude-sonnet-5' }}
+            --model ${{ inputs.model || env.DEFAULT_MODEL }}
             --max-turns 200
-            --allowedTools "Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*),Bash(git merge-base:*),Bash(git grep:*),Bash(git rev-parse:*),Bash(git rev-list:*),Bash(git cat-file:*),Bash(git ls-files:*),Bash(git ls-tree:*),Bash(git describe:*),Bash(git shortlog:*),Bash(git name-rev:*),Bash(git --no-pager:*),Bash(readtags:*),Bash(cscope:*),Bash(rg:*),Bash(grep:*),Bash(sed:*),Bash(awk:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(uniq:*),Bash(cut:*),Bash(tr:*),Bash(nl:*),Bash(comm:*),Bash(diff:*),Bash(find:*),Bash(ls:*),Bash(cat:*),Bash(file:*),Bash(stat:*),Bash(xxd:*),Bash(od:*),Bash(strings:*),Bash(basename:*),Bash(dirname:*),Bash(jq:*),Bash(python3:*)"
+            --allowedTools "Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git fetch:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*),Bash(git merge-base:*),Bash(git grep:*),Bash(git rev-parse:*),Bash(git rev-list:*),Bash(git cat-file:*),Bash(git ls-files:*),Bash(git ls-tree:*),Bash(git describe:*),Bash(git shortlog:*),Bash(git name-rev:*),Bash(git --no-pager:*),Bash(readtags:*),Bash(cscope:*),Bash(rg:*),Bash(grep:*),Bash(sed:*),Bash(awk:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(uniq:*),Bash(cut:*),Bash(tr:*),Bash(nl:*),Bash(comm:*),Bash(diff:*),Bash(find:*),Bash(ls:*),Bash(cat:*),Bash(file:*),Bash(stat:*),Bash(xxd:*),Bash(od:*),Bash(strings:*),Bash(basename:*),Bash(dirname:*),Bash(jq:*),Bash(python3:*)"
 
       # Footer with cost/tokens/duration, summed across both passes. Generated
       # by the workflow, not the model, so the numbers can't be invented.
@@ -420,7 +430,7 @@ jobs:
         if: always()
         env:
           EXEC_FILE: ${{ env.PASS1_EXEC }},${{ steps.refute.outputs.execution_file }}
-          MODEL: ${{ inputs.model || 'claude-sonnet-5' }}
+          MODEL: ${{ inputs.model || env.DEFAULT_MODEL }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           # always() means this runs even if the harness checkout never happened
