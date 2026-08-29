@@ -1,7 +1,7 @@
 ---
 name: monero-review-refute
 description: Adversarially verify the findings in an existing Monero PR review.
-allowed-tools: Read, Grep, Glob, Write, Edit, Skill, Bash(git diff:*), Bash(git fetch origin:*), Bash(git log:*), Bash(git show:*), Bash(git blame:*), Bash(git merge-base:*), Bash(git grep:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git cat-file:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git describe:*), Bash(git shortlog:*), Bash(git name-rev:*), Bash(git --no-pager:*), Bash(readtags:*), Bash(cscope:*), Bash(rg:*), Bash(grep:*), Bash(sed:*), Bash(awk:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(sort:*), Bash(uniq:*), Bash(cut:*), Bash(tr:*), Bash(nl:*), Bash(comm:*), Bash(diff:*), Bash(find:*), Bash(ls:*), Bash(cat:*), Bash(file:*), Bash(stat:*), Bash(xxd:*), Bash(od:*), Bash(strings:*), Bash(basename:*), Bash(dirname:*), Bash(jq:*)
+allowed-tools: Read, Grep, Glob, Write, Edit, Skill, Bash(git diff:*), Bash(git fetch origin:*), Bash(git log:*), Bash(git show:*), Bash(git merge-base:*), Bash(git grep:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git cat-file:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git describe:*), Bash(git shortlog:*), Bash(git name-rev:*), Bash(git --no-pager:*), Bash(readtags:*), Bash(cscope:*), Bash(rg:*), Bash(grep:*), Bash(sed:*), Bash(awk:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(sort:*), Bash(uniq:*), Bash(cut:*), Bash(tr:*), Bash(nl:*), Bash(comm:*), Bash(diff:*), Bash(find:*), Bash(ls:*), Bash(cat:*), Bash(file:*), Bash(stat:*), Bash(xxd:*), Bash(od:*), Bash(strings:*), Bash(basename:*), Bash(dirname:*), Bash(jq:*)
 ---
 
 A first-pass security review of this pull request has already been written to
@@ -24,6 +24,9 @@ CONFIRMED.
   whatever the allowlist says. Resolve the value in a separate call and paste
   it in.
 - `PR_CONTEXT.md` — the PR title and description, if present.
+- `PR_HISTORY.md` — the last dozen commits for every file the PR touches,
+  precomputed. Dating a removed guard is often what settles whether its removal
+  was deliberate, so read this before re-deriving anything.
 - `references/` in the `monero-security-review` skill directory:
   `refutations.md` (the recurring reasons findings here turn out to be
   unreachable — read this before you start), `trust-boundaries.md`, and
@@ -91,6 +94,28 @@ Use it, though — for this pass it is worth real budget:
 An ACK, an approval, or "this was already reviewed upstream" refutes nothing.
 Those are opinions about the change, and the whole reason this review exists is
 that opinions miss things. Only a guard you have read refutes a finding.
+
+## History is cheap or it hangs
+
+The checkout is a blobless partial clone: commits and trees are local,
+historical file *contents* are not and arrive one round-trip at a time.
+Measured on this repo, `git log --oneline -- <path>` is 0.018s and
+`git show <commit> -- <path>` is 0.032s, but `git log -S'<text>' -- <path>`
+takes 2m40s and both `git blame` and an unrestricted `git log -S` never finish
+— still running when killed at five minutes.
+
+`git blame` is therefore **not allowlisted**: a refused call costs you one turn,
+where a hanging one can consume the whole review. That is deliberate, not an
+oversight. Use `git log --oneline -- <path>` to narrow to candidate commits and
+`git show <commit> -- <path>` to see what each changed; it answers the same
+question in milliseconds. `git show <commit>:<path>` gives the whole file as it
+stood.
+
+This matters to you specifically. "The guard was removed deliberately, so the
+finding is invalid" and "the guard was removed by accident, so the finding
+stands" are both claims about history, and you can settle them cheaply. Do not
+leave one UNRESOLVED on the grounds that history is expensive — it is not, in
+the form above.
 
 ## Shell shape
 

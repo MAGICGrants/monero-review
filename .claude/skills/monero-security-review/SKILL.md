@@ -1,7 +1,7 @@
 ---
 name: monero-security-review
 description: Security review of the changes in a Monero pull request.
-allowed-tools: Read, Grep, Glob, Write, Edit, Skill, Bash(git diff:*), Bash(git fetch origin:*), Bash(git log:*), Bash(git show:*), Bash(git blame:*), Bash(git merge-base:*), Bash(git grep:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git cat-file:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git describe:*), Bash(git shortlog:*), Bash(git name-rev:*), Bash(git --no-pager:*), Bash(readtags:*), Bash(cscope:*), Bash(rg:*), Bash(grep:*), Bash(sed:*), Bash(awk:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(sort:*), Bash(uniq:*), Bash(cut:*), Bash(tr:*), Bash(nl:*), Bash(comm:*), Bash(diff:*), Bash(find:*), Bash(ls:*), Bash(cat:*), Bash(file:*), Bash(stat:*), Bash(xxd:*), Bash(od:*), Bash(strings:*), Bash(basename:*), Bash(dirname:*), Bash(jq:*)
+allowed-tools: Read, Grep, Glob, Write, Edit, Skill, Bash(git diff:*), Bash(git fetch origin:*), Bash(git log:*), Bash(git show:*), Bash(git merge-base:*), Bash(git grep:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git cat-file:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git describe:*), Bash(git shortlog:*), Bash(git name-rev:*), Bash(git --no-pager:*), Bash(readtags:*), Bash(cscope:*), Bash(rg:*), Bash(grep:*), Bash(sed:*), Bash(awk:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(sort:*), Bash(uniq:*), Bash(cut:*), Bash(tr:*), Bash(nl:*), Bash(comm:*), Bash(diff:*), Bash(find:*), Bash(ls:*), Bash(cat:*), Bash(file:*), Bash(stat:*), Bash(xxd:*), Bash(od:*), Bash(strings:*), Bash(basename:*), Bash(dirname:*), Bash(jq:*)
 ---
 
 You are reviewing one pull request against `monero-project/monero` for
@@ -248,8 +248,37 @@ and adapt — do not silently give up on it. If the index files are absent
 entirely, fall back to Grep and say so in your report, because your
 reachability claims are weaker without it.
 
-`git blame <file>` and `git log -S'<text>'` (pickaxe) find when a line or a
-guard was introduced or removed. Use them for step 6.
+### History is cheap or it hangs, with nothing in between
+
+The checkout is a **blobless partial clone** (`--filter=blob:none`). Commits and
+trees are local; historical file *contents* are not, and arrive one network
+round-trip at a time. That splits the history commands into two groups, measured
+on this repo:
+
+| command | cost |
+| --- | --- |
+| `git log --oneline -15 -- <path>` | 0.018s |
+| `git log --oneline --stat -3 -- <path>` | 0.027s |
+| `git show <commit> -- <path>` | 0.032s |
+| `git show <commit>:<path>` (read the old file) | 0.026s |
+| `git log -S'<text>' -- <path>` | **2m40s** |
+| `git log -S'<text>'` with no path | **never finishes** |
+| `git blame <file>` | **never finishes** |
+
+**Do not run `git blame` here, and never run the pickaxe without a `-- <path>`.**
+Both were still running when killed at five minutes. Inside a 120-minute budget
+one of them can consume the entire review and you will have nothing to show for
+it. This is not a limit you can argue with; the objects are not on the disk.
+
+You do not need either one. To find when a line or a guard was introduced or
+removed, use the fast pair: `git log --oneline -- <path>` narrows to candidate
+commits, then `git show <commit> -- <path>` shows exactly what each one changed.
+That answers the same question in milliseconds, and `git show <commit>:<path>`
+gives you the whole file as it stood at that commit.
+
+Keep `git log -S'<text>' -- <path>` for the one case the fast pair cannot
+settle — you have a specific deleted string and the candidate list is too long
+to read. Budget it as roughly three minutes, path-restricted, once.
 
 ## Method
 
@@ -288,15 +317,21 @@ finding. Say so and move on.
 
 **5. Refute every candidate** (mandatory — see below).
 
-**6. Check history.** For files with a candidate finding, run
-`git log --oneline -15 -- <file>` and look for a prior fix this change might be
-reverting or reintroducing. Regressions of known bugs are high-value.
+**6. Check history.** `PR_HISTORY.md` already holds the last dozen commits for
+every file this PR touches — read it rather than re-deriving it. Look for a
+prior fix this change might be reverting or reintroducing; regressions of known
+bugs are high-value.
 
-When the diff **removes** a check, find out why it was there:
-`git log -S'<the removed text>' --oneline -- <file>`, then `git show` the commit
-that added it. If it was added as a security fix and this PR removes it without
-explanation, that is a finding in its own right — say so, and quote the original
-commit message.
+When the diff **removes** a check, find out why it was there. Scan
+`PR_HISTORY.md` for a likely commit, then `git show <commit> -- <file>` to
+confirm it is the one that added the check. If it was added as a security fix
+and this PR removes it without explanation, that is a finding in its own right —
+say so, and quote the original commit message.
+
+If the history in `PR_HISTORY.md` does not reach far enough back,
+`git log --oneline -60 -- <file>` extends it for free. Only if you have a
+specific deleted string and still cannot place it is the pickaxe worth its three
+minutes, and then only as `git log -S'<text>' --oneline -- <file>`.
 
 ## What to look for, in priority order
 
