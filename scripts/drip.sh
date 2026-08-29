@@ -52,7 +52,7 @@ if [ -z "$pr" ]; then
 fi
 
 log "reviewing PR $pr"
-if "$HERE/review-local.sh" "$pr" "${MODEL:-claude-sonnet-5}"; then
+if "$HERE/review-local.sh" "$pr" "${MODEL:-claude-opus-5}"; then
   log "done: PR $pr"
 else
   log "ERROR: review of PR $pr failed"

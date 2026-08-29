@@ -17,11 +17,11 @@ on:
         # two disagreed (dropdown claude-opus-5, fallback claude-sonnet-5) the
         # UI advertised a model no scheduled run ever used, and the telemetry
         # in every issue was the only place the truth appeared.
-        default: claude-sonnet-5
+        default: claude-opus-5
         type: choice
         options:
-          - claude-sonnet-5
           - claude-opus-5
+          - claude-sonnet-5
 
   # Twice an hour, off the top of the hour.
   #
@@ -50,7 +50,13 @@ env:
   # What a run gets when nothing names a model -- every `schedule` tick, and
   # any dispatch that omits the input. Keep the `model:` input default above
   # identical, or the dropdown lies about scheduled runs again.
-  DEFAULT_MODEL: claude-sonnet-5
+  #
+  # Opus. Measured cost per review on this queue: Sonnet ran a $1.02 median
+  # and $0.13 on a trivial diff; the one Opus review so far cost $13.56, and
+  # dispatch.sh recorded ~$3.69 API-equivalent on an earlier sample. Budget
+  # for several times the Sonnet rate, and watch the per-issue telemetry
+  # footer rather than guessing -- it reports real cost per run.
+  DEFAULT_MODEL: claude-opus-5
   # Only consider PRs touched this recently. Upstream is busier than it looks:
   # measured 2026-08-26, the starting queue is ~22 PRs at 1 day, ~33 at 2,
   # ~42 at 3. Start at 1 so the first drain is survivable, then widen.

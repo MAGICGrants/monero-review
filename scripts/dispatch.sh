@@ -50,11 +50,18 @@ set -euo pipefail
 
 REPO=${REPO:-xmrack/monero-review}
 WORKFLOW=${WORKFLOW:-review.yml}
-# Sweeps run on Sonnet. The workflow's `model` input defaults to Opus for
-# hand-picked reviews, and a dispatch that omits it inherits that default -- so
-# an unattended drip would silently run every PR on Opus (~$3.69 API-equivalent
-# per review measured, several times Sonnet). Pass it explicitly.
-MODEL=${MODEL:-claude-sonnet-5}
+# Sweeps run on Opus, matching DEFAULT_MODEL in the workflow. Passed
+# explicitly anyway: this script's whole job is to be the unattended driver,
+# and it should not silently change model because someone edited a default in
+# the workflow. Set MODEL=claude-sonnet-5 in the environment to run a cheap
+# sweep without touching either file.
+#
+# Cost: Opus is several times Sonnet's rate on this queue -- a $1.02 Sonnet
+# median against a $13.56 Opus review and an earlier ~$3.69 sample. At the
+# observed ~7 PRs/hour that is real money, so watch the telemetry footer on
+# the filed issues, and remember `gh variable set REVIEW_PAUSED --body 1`
+# stops sweeps without editing anything.
+MODEL=${MODEL:-claude-opus-5}
 TOKEN_FILE=${TOKEN_FILE:-$HOME/.config/monero-review.token}
 
 # cron gives you a near-empty PATH.
