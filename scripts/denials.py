@@ -14,10 +14,43 @@ a missing list is worth a note, not a red run.
 """
 import json
 import os
+import re
 import sys
 import collections
 
 KEYS = ("permission_denials", "permissionDenials")
+
+# Why a call was refused, so denial review is something the harness does on
+# every run rather than something a human does by pasting lists into a chat.
+#
+# Every shape below was observed in a real run and each has a documented
+# alternative in the skills. An UNCLASSIFIED denial is therefore the
+# interesting one: it means a NEW cause has appeared and the skills do not yet
+# answer it. That is the line worth reading.
+CAUSES = (
+    # (label, pattern, the answer the skills already give)
+    ("rc-echo",      r'echo\s+"?rc\d*=\$\?',
+     "the tool result already reports success/failure"),
+    ("chain",        r';|&&|\bfor\b[^;]*\bdo\b',
+     "one command takes several args: git log --no-walk <sha> <sha>"),
+    ("redirect",     r'(?<!2)>\s*[^&\s]',
+     "use the Write tool"),
+    ("substitution", r'\$\(',
+     "resolve it in a separate call"),
+    ("outside-tree", r'(^|\s)(/usr/|/etc/|/opt/)|find\s+/\s',
+     "/usr/include/boost/X -> deps-include/boost/X"),
+    ("git -C",       r'\bgit\s+-C\b',
+     "PR_SUBMODULES.md already holds the submodule range"),
+)
+
+
+def classify(cmd):
+    """All causes matching one refused command, most specific first."""
+    hits = [name for name, pat, _ in CAUSES if re.search(pat, cmd)]
+    # rc-echo implies a chain; report the specific reason, not both.
+    if "rc-echo" in hits and "chain" in hits:
+        hits.remove("chain")
+    return hits or ["UNCLASSIFIED"]
 
 
 def walk(node, depth=0):
@@ -103,8 +136,22 @@ def main():
         print("denials: none recorded")
         return
     print(f"denials: {total} refused tool call(s), {len(seen)} distinct:")
+    causes = collections.Counter()
     for (tool, what), n in seen.most_common():
+        hits = classify(what)
+        causes.update({h: n for h in hits})
         print(f"  x{n} [{tool}] {what}")
+        print(f"      cause: {', '.join(hits)}")
+
+    print("denial causes: "
+          + ", ".join(f"{c}={n}" for c, n in causes.most_common()))
+    answers = {name: fix for name, _, fix in CAUSES}
+    for c, _ in causes.most_common():
+        if c in answers:
+            print(f"  {c}: {answers[c]}")
+    if "UNCLASSIFIED" in causes:
+        print("  UNCLASSIFIED: a refusal shape the skills do not yet answer -- "
+              "worth reading the command above and adding guidance.")
 
 
 if __name__ == "__main__":
