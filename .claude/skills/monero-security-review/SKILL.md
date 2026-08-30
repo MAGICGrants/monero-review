@@ -198,6 +198,21 @@ for nothing:
 | any path outside the working tree | it is refused whatever the shape. For Boost specifically: `/usr/include/boost/X` → **`deps-include/boost/X`** |
 | `$(...)` command substitution | resolve it in a separate call, paste the value in |
 
+**When you want several things at once, use one command — not a chain.**
+Batching to save turns is the right instinct and `;`, `&&` and `for` loops are
+the wrong mechanism: all three are refused, so the batch costs a turn and
+returns nothing. Git already takes multiple objects in a single invocation:
+
+```
+git log --no-walk --format='=== %h ===%n%B' <sha> <sha> <sha>   # several commit messages
+git show --stat <sha> <sha>                                     # several commits' stats
+git log --oneline -15 -- <path> <path>                          # several paths at once
+```
+
+`cscope` and `readtags` take one query per invocation, so several lookups
+genuinely need several calls. That is fine — a separate call is cheap, a
+refused one is not.
+
 **Stop appending `; echo "rc=$?"`.** It is the single most common thing that
 gets refused here — three of five refusals in one recent run were exactly this
 shape, on commands that would otherwise have run fine. It is also pointless:

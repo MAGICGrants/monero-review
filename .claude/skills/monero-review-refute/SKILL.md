@@ -174,6 +174,13 @@ Two more turn-wasters worth knowing before you hit them:
   that turns on `boost::optional` semantics is now settleable by `file:line`
   instead of left UNRESOLVED, which is exactly what happened in an earlier
   review. Untracked, so use `ls`/`find`, not `git ls-files`.
+- **Batch with one command, not a chain.** `;`, `&&` and `for` loops are all
+  refused, so a batched call costs a turn and returns nothing. Git takes
+  multiple objects directly:
+  `git log --no-walk --format='=== %h ===%n%B' <sha> <sha> <sha>` returns
+  every commit message in one call, and `git show --stat <sha> <sha>` the same
+  for stats. `cscope` and `readtags` take one query each — use separate calls,
+  which are cheap.
 - **Do not append `; echo "rc=$?"`.** It is refused, and the tool result
   already reports success, failure and stderr. Three of five refusals in one
   recent run were this shape on commands that would otherwise have worked.
