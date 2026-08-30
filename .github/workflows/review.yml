@@ -482,26 +482,27 @@ jobs:
               sudo ln -sf "$HOME/.cargo/bin/weggli" /usr/local/bin/weggli 2>/dev/null || true
           fi
 
-          # Boost headers, copied INSIDE the working tree so the reviewer can
-          # actually read them. Installing libboost-dev put them at
-          # /usr/include/boost, which `g++ -E` can read (it is an ordinary
-          # subprocess) but the model cannot: the sandbox boundary is the
-          # working tree, and `ls` being allowlisted does not get past it.
+          # System headers, copied INSIDE the working tree so the reviewer can
+          # read them. They are installed at /usr/include, which `g++ -E` can
+          # read (it is an ordinary subprocess) but the model cannot: the
+          # sandbox boundary is the working tree, and `ls` being allowlisted
+          # does not get past it.
           #
-          # This has cost two reviews already. #203 could not cite
+          # This cost two reviews. #203 could not cite
           # boost::optional::operator! by file:line and said so; a later run
-          # burned two of its five refused calls on plain `ls -d
-          # /usr/include/boost/asio/ip/`, which has no chain, no pipe and no
-          # substitution -- it was refused purely for being outside the tree.
+          # burned two of five refused calls on plain
+          # `ls -d /usr/include/boost/asio/ip/`, which has no chain, no pipe
+          # and no substitution -- refused purely for being outside the tree.
           #
-          # 183MB and ~10s, measured, against a ~14 minute median review.
-          # Boost only: it is the dependency whose SEMANTICS reviews keep
-          # needing (optional, asio, multiprecision), where the others are
-          # mostly C headers the review can reason about without reading.
-          if [ -d /usr/include/boost ]; then
+          # The whole of /usr/include rather than just boost: measured at 245MB
+          # against boost's 183MB, so openssl, sodium, unbound, zmq and the
+          # protobuf headers come along for 62MB more. Monero links all of
+          # them, and a review that has to reason about one should be able to
+          # read it. ~10s against a ~14 minute median review.
+          if [ -d /usr/include ]; then
             mkdir -p deps-include
-            cp -r /usr/include/boost deps-include/boost 2>/dev/null || true
-            echo "deps: boost headers at deps-include/boost ($(du -sh deps-include/boost 2>/dev/null | cut -f1))"
+            cp -r /usr/include/. deps-include/ 2>/dev/null || true
+            echo "deps: system headers at deps-include/ ($(du -sh deps-include 2>/dev/null | cut -f1))"
           fi
 
           {
@@ -519,10 +520,12 @@ jobs:
             done
             echo
             echo
-            if [ -d deps-include/boost ]; then
+            if [ -d deps-include ]; then
               echo "System headers readable from inside the tree:"
-              echo "- deps-include/boost/  (Boost, copied from /usr/include)"
-              echo "  /usr/include is OUTSIDE the sandbox and cannot be read."
+              echo "- deps-include/   (a copy of /usr/include: boost, openssl,"
+              echo "                   sodium, unbound, zmq, protobuf, ...)"
+              echo "  /usr/include itself is OUTSIDE the sandbox and cannot be read."
+              echo "  Substitution is mechanical: /usr/include/X -> deps-include/X"
             fi
             echo
             echo "Deliberately absent, measured on this tree:"
@@ -552,7 +555,7 @@ jobs:
           claude_args: |
             --model ${{ inputs.model || env.DEFAULT_MODEL }}
             --max-turns 200
-            --allowedTools "Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git fetch origin:*),Bash(git log:*),Bash(git show:*),Bash(git merge-base:*),Bash(git grep:*),Bash(git rev-parse:*),Bash(git rev-list:*),Bash(git cat-file:*),Bash(git ls-files:*),Bash(git ls-tree:*),Bash(git describe:*),Bash(git shortlog:*),Bash(git name-rev:*),Bash(git --no-pager:*),Bash(readtags:*),Bash(cscope:*),Bash(rg:*),Bash(grep:*),Bash(sed:*),Bash(awk:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(uniq:*),Bash(cut:*),Bash(tr:*),Bash(nl:*),Bash(comm:*),Bash(diff:*),Bash(find:*),Bash(ls:*),Bash(cat:*),Bash(file:*),Bash(stat:*),Bash(xxd:*),Bash(od:*),Bash(strings:*),Bash(basename:*),Bash(dirname:*),Bash(jq:*),Bash(bc:*),Bash(shellcheck:*),Bash(g++ -E:*),Bash(weggli:*)"
+            --allowedTools "Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git fetch origin:*),Bash(git log:*),Bash(git show:*),Bash(git merge-base:*),Bash(git grep:*),Bash(git rev-parse:*),Bash(git rev-list:*),Bash(git cat-file:*),Bash(git ls-files:*),Bash(git ls-tree:*),Bash(git describe:*),Bash(git shortlog:*),Bash(git name-rev:*),Bash(git --no-pager:*),Bash(readtags:*),Bash(cscope:*),Bash(rg:*),Bash(grep:*),Bash(sed:*),Bash(awk:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(uniq:*),Bash(cut:*),Bash(tr:*),Bash(nl:*),Bash(comm:*),Bash(diff:*),Bash(find:*),Bash(ls:*),Bash(cat:*),Bash(file:*),Bash(stat:*),Bash(xxd:*),Bash(od:*),Bash(strings:*),Bash(basename:*),Bash(dirname:*),Bash(jq:*),Bash(bc:*),Bash(shellcheck:*),Bash(g++ -E:*),Bash(weggli:*),Bash(echo:*),Bash(printf:*),Bash(pwd:*),Bash(realpath:*),Bash(readlink:*),Bash(test:*),Bash(true:*),Bash(false:*),Bash(seq:*),Bash(date:*),Bash(tac:*),Bash(rev:*),Bash(fold:*),Bash(fmt:*),Bash(column:*),Bash(paste:*),Bash(join:*),Bash(cmp:*),Bash(md5sum:*),Bash(sha1sum:*),Bash(sha256sum:*),Bash(cksum:*),Bash(du:*),Bash(git show-ref:*),Bash(git for-each-ref:*),Bash(git symbolic-ref:*),Bash(git diff-tree:*),Bash(git submodule status:*),Bash(git count-objects:*)"
 
       # NB: this list is the one that BINDS. The `allowed-tools:` line in
       # each skill's frontmatter is documentation, and review-local.sh carries
@@ -649,7 +652,7 @@ jobs:
           claude_args: |
             --model ${{ inputs.model || env.DEFAULT_MODEL }}
             --max-turns 200
-            --allowedTools "Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git fetch origin:*),Bash(git log:*),Bash(git show:*),Bash(git merge-base:*),Bash(git grep:*),Bash(git rev-parse:*),Bash(git rev-list:*),Bash(git cat-file:*),Bash(git ls-files:*),Bash(git ls-tree:*),Bash(git describe:*),Bash(git shortlog:*),Bash(git name-rev:*),Bash(git --no-pager:*),Bash(readtags:*),Bash(cscope:*),Bash(rg:*),Bash(grep:*),Bash(sed:*),Bash(awk:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(uniq:*),Bash(cut:*),Bash(tr:*),Bash(nl:*),Bash(comm:*),Bash(diff:*),Bash(find:*),Bash(ls:*),Bash(cat:*),Bash(file:*),Bash(stat:*),Bash(xxd:*),Bash(od:*),Bash(strings:*),Bash(basename:*),Bash(dirname:*),Bash(jq:*),Bash(bc:*),Bash(shellcheck:*),Bash(g++ -E:*),Bash(weggli:*)"
+            --allowedTools "Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git fetch origin:*),Bash(git log:*),Bash(git show:*),Bash(git merge-base:*),Bash(git grep:*),Bash(git rev-parse:*),Bash(git rev-list:*),Bash(git cat-file:*),Bash(git ls-files:*),Bash(git ls-tree:*),Bash(git describe:*),Bash(git shortlog:*),Bash(git name-rev:*),Bash(git --no-pager:*),Bash(readtags:*),Bash(cscope:*),Bash(rg:*),Bash(grep:*),Bash(sed:*),Bash(awk:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(uniq:*),Bash(cut:*),Bash(tr:*),Bash(nl:*),Bash(comm:*),Bash(diff:*),Bash(find:*),Bash(ls:*),Bash(cat:*),Bash(file:*),Bash(stat:*),Bash(xxd:*),Bash(od:*),Bash(strings:*),Bash(basename:*),Bash(dirname:*),Bash(jq:*),Bash(bc:*),Bash(shellcheck:*),Bash(g++ -E:*),Bash(weggli:*),Bash(echo:*),Bash(printf:*),Bash(pwd:*),Bash(realpath:*),Bash(readlink:*),Bash(test:*),Bash(true:*),Bash(false:*),Bash(seq:*),Bash(date:*),Bash(tac:*),Bash(rev:*),Bash(fold:*),Bash(fmt:*),Bash(column:*),Bash(paste:*),Bash(join:*),Bash(cmp:*),Bash(md5sum:*),Bash(sha1sum:*),Bash(sha256sum:*),Bash(cksum:*),Bash(du:*),Bash(git show-ref:*),Bash(git for-each-ref:*),Bash(git symbolic-ref:*),Bash(git diff-tree:*),Bash(git submodule status:*),Bash(git count-objects:*)"
 
       # Footer with cost/tokens/duration, summed across both passes. Generated
       # by the workflow, not the model, so the numbers can't be invented.

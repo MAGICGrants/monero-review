@@ -188,15 +188,16 @@ cp -r "$HERE/.claude" "$CACHE/.claude"
     fi
   done
   echo
-  if [ -d /usr/include/boost ] && [ ! -d "$CACHE/deps-include/boost" ]; then
+  if [ -d /usr/include ] && [ ! -d "$CACHE/deps-include/boost" ]; then
     mkdir -p "$CACHE/deps-include"
-    cp -r /usr/include/boost "$CACHE/deps-include/boost" 2>/dev/null || true
+    cp -r /usr/include/. "$CACHE/deps-include/" 2>/dev/null || true
   fi
-  if [ -d "$CACHE/deps-include/boost" ]; then
+  if [ -d "$CACHE/deps-include" ]; then
     echo
     echo "System headers readable from inside the tree:"
-    echo "- deps-include/boost/  (Boost, copied from /usr/include)"
-    echo "  /usr/include is OUTSIDE the sandbox and cannot be read."
+    echo "- deps-include/   (a copy of /usr/include)"
+    echo "  /usr/include itself is OUTSIDE the sandbox and cannot be read."
+    echo "  Substitution is mechanical: /usr/include/X -> deps-include/X"
     echo
   fi
   echo "Deliberately absent, measured on this tree:"
@@ -208,7 +209,7 @@ cp -r "$HERE/.claude" "$CACHE/.claude"
 # are absent -- `sudo apt install universal-ctags cscope` to enable.
 bash "$HERE/scripts/build_index.sh" "$CACHE"
 
-TOOLS="Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git fetch origin:*),Bash(git log:*),Bash(git show:*),Bash(git merge-base:*),Bash(git grep:*),Bash(git rev-parse:*),Bash(git rev-list:*),Bash(git cat-file:*),Bash(git ls-files:*),Bash(git ls-tree:*),Bash(git describe:*),Bash(git shortlog:*),Bash(git name-rev:*),Bash(git --no-pager:*),Bash(readtags:*),Bash(cscope:*),Bash(rg:*),Bash(grep:*),Bash(sed:*),Bash(awk:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(uniq:*),Bash(cut:*),Bash(tr:*),Bash(nl:*),Bash(comm:*),Bash(diff:*),Bash(find:*),Bash(ls:*),Bash(cat:*),Bash(file:*),Bash(stat:*),Bash(xxd:*),Bash(od:*),Bash(strings:*),Bash(basename:*),Bash(dirname:*),Bash(jq:*),Bash(bc:*),Bash(shellcheck:*),Bash(g++ -E:*),Bash(weggli:*)"
+TOOLS="Read,Grep,Glob,Write,Edit,Skill,Bash(git diff:*),Bash(git fetch origin:*),Bash(git log:*),Bash(git show:*),Bash(git merge-base:*),Bash(git grep:*),Bash(git rev-parse:*),Bash(git rev-list:*),Bash(git cat-file:*),Bash(git ls-files:*),Bash(git ls-tree:*),Bash(git describe:*),Bash(git shortlog:*),Bash(git name-rev:*),Bash(git --no-pager:*),Bash(readtags:*),Bash(cscope:*),Bash(rg:*),Bash(grep:*),Bash(sed:*),Bash(awk:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(uniq:*),Bash(cut:*),Bash(tr:*),Bash(nl:*),Bash(comm:*),Bash(diff:*),Bash(find:*),Bash(ls:*),Bash(cat:*),Bash(file:*),Bash(stat:*),Bash(xxd:*),Bash(od:*),Bash(strings:*),Bash(basename:*),Bash(dirname:*),Bash(jq:*),Bash(bc:*),Bash(shellcheck:*),Bash(g++ -E:*),Bash(weggli:*),Bash(echo:*),Bash(printf:*),Bash(pwd:*),Bash(realpath:*),Bash(readlink:*),Bash(test:*),Bash(true:*),Bash(false:*),Bash(seq:*),Bash(date:*),Bash(tac:*),Bash(rev:*),Bash(fold:*),Bash(fmt:*),Bash(column:*),Bash(paste:*),Bash(join:*),Bash(cmp:*),Bash(md5sum:*),Bash(sha1sum:*),Bash(sha256sum:*),Bash(cksum:*),Bash(du:*),Bash(git show-ref:*),Bash(git for-each-ref:*),Bash(git symbolic-ref:*),Bash(git diff-tree:*),Bash(git submodule status:*),Bash(git count-objects:*)"
 
 rm -f "$CACHE/review.md" "$CACHE/exec.json" "$CACHE/exec-refute.json"
 echo "==> reviewing with $MODEL"

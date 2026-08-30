@@ -1,7 +1,7 @@
 ---
 name: monero-security-review
 description: Security review of the changes in a Monero pull request.
-allowed-tools: Read, Grep, Glob, Write, Edit, Skill, Bash(git diff:*), Bash(git fetch origin:*), Bash(git log:*), Bash(git show:*), Bash(git merge-base:*), Bash(git grep:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git cat-file:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git describe:*), Bash(git shortlog:*), Bash(git name-rev:*), Bash(git --no-pager:*), Bash(readtags:*), Bash(cscope:*), Bash(rg:*), Bash(grep:*), Bash(sed:*), Bash(awk:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(sort:*), Bash(uniq:*), Bash(cut:*), Bash(tr:*), Bash(nl:*), Bash(comm:*), Bash(diff:*), Bash(find:*), Bash(ls:*), Bash(cat:*), Bash(file:*), Bash(stat:*), Bash(xxd:*), Bash(od:*), Bash(strings:*), Bash(basename:*), Bash(dirname:*), Bash(jq:*), Bash(bc:*), Bash(shellcheck:*), Bash(g++ -E:*), Bash(weggli:*)
+allowed-tools: Read, Grep, Glob, Write, Edit, Skill, Bash(git diff:*), Bash(git fetch origin:*), Bash(git log:*), Bash(git show:*), Bash(git merge-base:*), Bash(git grep:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git cat-file:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git describe:*), Bash(git shortlog:*), Bash(git name-rev:*), Bash(git --no-pager:*), Bash(readtags:*), Bash(cscope:*), Bash(rg:*), Bash(grep:*), Bash(sed:*), Bash(awk:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(sort:*), Bash(uniq:*), Bash(cut:*), Bash(tr:*), Bash(nl:*), Bash(comm:*), Bash(diff:*), Bash(find:*), Bash(ls:*), Bash(cat:*), Bash(file:*), Bash(stat:*), Bash(xxd:*), Bash(od:*), Bash(strings:*), Bash(basename:*), Bash(dirname:*), Bash(jq:*), Bash(bc:*), Bash(shellcheck:*), Bash(g++ -E:*), Bash(weggli:*), Bash(echo:*), Bash(printf:*), Bash(pwd:*), Bash(realpath:*), Bash(readlink:*), Bash(test:*), Bash(true:*), Bash(false:*), Bash(seq:*), Bash(date:*), Bash(tac:*), Bash(rev:*), Bash(fold:*), Bash(fmt:*), Bash(column:*), Bash(paste:*), Bash(join:*), Bash(cmp:*), Bash(md5sum:*), Bash(sha1sum:*), Bash(sha256sum:*), Bash(cksum:*), Bash(du:*), Bash(git show-ref:*), Bash(git for-each-ref:*), Bash(git symbolic-ref:*), Bash(git diff-tree:*), Bash(git submodule status:*), Bash(git count-objects:*)
 ---
 
 You are reviewing one pull request against `monero-project/monero` for
@@ -140,12 +140,14 @@ second. `ls -d /usr/include/boost/asio/ip/` is refused despite having no pipe,
 no chain and no substitution. Do not retry it in a different shape; the shape
 is not the problem.
 
-**Boost headers are available inside the tree**, at `deps-include/boost/`,
-copied there precisely because reviews kept needing them and could not read
-`/usr/include`. So `boost::optional`'s `operator!`, asio's resolver types, and
-the rest are citable by `file:line` like any other source. They are untracked,
-so `git ls-files` will not list them — use `ls` or `find deps-include/boost`.
-`TOOLING.md` says whether the copy is present.
+**System headers are available inside the tree**, at `deps-include/`, a copy
+of `/usr/include` made precisely because reviews kept needing them and could
+not read the original. Boost, OpenSSL, libsodium, unbound, zmq and protobuf
+are all there, so `boost::optional`'s `operator!`, an OpenSSL constant or a
+sodium prototype is citable by `file:line` like any other source. The
+substitution is mechanical: `/usr/include/X` → `deps-include/X`. They are
+untracked, so `git ls-files` will not list them — use `ls`, `find` or `rg`
+under `deps-include/`. `TOOLING.md` says whether the copy is present.
 
 `git ls-files | grep <name>` locates any tracked file in the tree and, unlike
 `find`, cannot wander off it.
@@ -193,15 +195,27 @@ for nothing:
 | refused | use instead |
 | --- | --- |
 | `cmd > file` — any redirect to a file | **use the `Write` tool** — it is allowed and writes any file you want; for shell output, pipe it: `cmd \| wc -l` |
-| `cmd1 && cmd2`, `cmd1; cmd2` | two separate calls |
-| `cmd; echo "rc=$?"` | just run `cmd` — see below |
-| any path outside the working tree | it is refused whatever the shape. For Boost specifically: `/usr/include/boost/X` → **`deps-include/boost/X`** |
+| `cmd1 && cmd2`, `cmd1; cmd2` | usually fine now — but if refused, split it |
+| `cmd; echo "rc=$?"` | just run `cmd` — the result already tells you |
+| any path outside the working tree | refused whatever the shape. `/usr/include/X` → **`deps-include/X`** |
 | `$(...)` command substitution | resolve it in a separate call, paste the value in |
 
-**When you want several things at once, use one command — not a chain.**
-Batching to save turns is the right instinct and `;`, `&&` and `for` loops are
-the wrong mechanism: all three are refused, so the batch costs a turn and
-returns nothing. Git already takes multiple objects in a single invocation:
+**A compound command is only as allowed as its parts.** Pipes have always
+worked here (`git diff origin/base...HEAD | wc -l`), which means the checker
+splits a command up and validates each piece — it is not a blanket ban on
+compound shapes. Earlier guidance in this file said `;` chains were refused
+outright; that was inferred from refusals whose real cause was a *part* that
+was not permitted, most often `echo`, which is now allowlisted along with
+`printf`, `test`, `true`, `false`, `seq`, `date` and the other small
+utilities. So chain if it helps.
+
+If a chain is still refused, the cause is almost certainly one component, not
+the chaining: read the command and find the part that is not on the list,
+rather than rephrasing the whole thing. Splitting into separate calls always
+works and costs almost nothing.
+
+Git also takes multiple objects in a single invocation, which is often
+cleaner than chaining anyway:
 
 ```
 git log --no-walk --format='=== %h ===%n%B' <sha> <sha> <sha>   # several commit messages

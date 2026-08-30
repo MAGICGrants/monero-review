@@ -1,7 +1,7 @@
 ---
 name: monero-review-refute
 description: Adversarially verify the findings in an existing Monero PR review.
-allowed-tools: Read, Grep, Glob, Write, Edit, Skill, Bash(git diff:*), Bash(git fetch origin:*), Bash(git log:*), Bash(git show:*), Bash(git merge-base:*), Bash(git grep:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git cat-file:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git describe:*), Bash(git shortlog:*), Bash(git name-rev:*), Bash(git --no-pager:*), Bash(readtags:*), Bash(cscope:*), Bash(rg:*), Bash(grep:*), Bash(sed:*), Bash(awk:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(sort:*), Bash(uniq:*), Bash(cut:*), Bash(tr:*), Bash(nl:*), Bash(comm:*), Bash(diff:*), Bash(find:*), Bash(ls:*), Bash(cat:*), Bash(file:*), Bash(stat:*), Bash(xxd:*), Bash(od:*), Bash(strings:*), Bash(basename:*), Bash(dirname:*), Bash(jq:*), Bash(bc:*), Bash(shellcheck:*), Bash(g++ -E:*), Bash(weggli:*)
+allowed-tools: Read, Grep, Glob, Write, Edit, Skill, Bash(git diff:*), Bash(git fetch origin:*), Bash(git log:*), Bash(git show:*), Bash(git merge-base:*), Bash(git grep:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git cat-file:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git describe:*), Bash(git shortlog:*), Bash(git name-rev:*), Bash(git --no-pager:*), Bash(readtags:*), Bash(cscope:*), Bash(rg:*), Bash(grep:*), Bash(sed:*), Bash(awk:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(sort:*), Bash(uniq:*), Bash(cut:*), Bash(tr:*), Bash(nl:*), Bash(comm:*), Bash(diff:*), Bash(find:*), Bash(ls:*), Bash(cat:*), Bash(file:*), Bash(stat:*), Bash(xxd:*), Bash(od:*), Bash(strings:*), Bash(basename:*), Bash(dirname:*), Bash(jq:*), Bash(bc:*), Bash(shellcheck:*), Bash(g++ -E:*), Bash(weggli:*), Bash(echo:*), Bash(printf:*), Bash(pwd:*), Bash(realpath:*), Bash(readlink:*), Bash(test:*), Bash(true:*), Bash(false:*), Bash(seq:*), Bash(date:*), Bash(tac:*), Bash(rev:*), Bash(fold:*), Bash(fmt:*), Bash(column:*), Bash(paste:*), Bash(join:*), Bash(cmp:*), Bash(md5sum:*), Bash(sha1sum:*), Bash(sha256sum:*), Bash(cksum:*), Bash(du:*), Bash(git show-ref:*), Bash(git for-each-ref:*), Bash(git symbolic-ref:*), Bash(git diff-tree:*), Bash(git submodule status:*), Bash(git count-objects:*)
 ---
 
 A first-pass security review of this pull request has already been written to
@@ -169,14 +169,19 @@ Two more turn-wasters worth knowing before you hit them:
 - **Stay inside the checkout.** `/usr/include` and anything else outside the
   working tree is refused even though `ls` and `find` are allowlisted — that is
   the filesystem boundary, not the allowlist, and no rephrasing gets past it.
-  The substitution is mechanical: `/usr/include/boost/X` → `deps-include/boost/X`.
-  **Boost is the exception**: it is copied to `deps-include/boost/`, so a claim
-  that turns on `boost::optional` semantics is now settleable by `file:line`
-  instead of left UNRESOLVED, which is exactly what happened in an earlier
-  review. Untracked, so use `ls`/`find`, not `git ls-files`.
-- **Batch with one command, not a chain.** `;`, `&&` and `for` loops are all
-  refused, so a batched call costs a turn and returns nothing. Git takes
-  multiple objects directly:
+  **System headers are the exception**: `/usr/include` is copied to
+  `deps-include/`, substitution `/usr/include/X` → `deps-include/X`. So a claim
+  turning on `boost::optional` semantics, an OpenSSL constant or a sodium
+  prototype is settleable by `file:line` instead of left UNRESOLVED — which is
+  exactly what happened in an earlier review. Untracked, so use `ls`/`find`/`rg`,
+  not `git ls-files`.
+- **A compound command is only as allowed as its parts.** Pipes have always
+  worked, so the checker splits and validates each piece rather than banning
+  compound shapes. `echo`, `printf`, `test`, `seq` and similar are now
+  allowlisted, so chains that previously failed on those parts should work. If
+  one is still refused, find the component that is not permitted instead of
+  rephrasing — or just split it, which always works. Git also takes multiple
+  objects directly:
   `git log --no-walk --format='=== %h ===%n%B' <sha> <sha> <sha>` returns
   every commit message in one call, and `git show --stat <sha> <sha>` the same
   for stats. `cscope` and `readtags` take one query each — use separate calls,
