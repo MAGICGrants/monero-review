@@ -482,6 +482,28 @@ jobs:
               sudo ln -sf "$HOME/.cargo/bin/weggli" /usr/local/bin/weggli 2>/dev/null || true
           fi
 
+          # Boost headers, copied INSIDE the working tree so the reviewer can
+          # actually read them. Installing libboost-dev put them at
+          # /usr/include/boost, which `g++ -E` can read (it is an ordinary
+          # subprocess) but the model cannot: the sandbox boundary is the
+          # working tree, and `ls` being allowlisted does not get past it.
+          #
+          # This has cost two reviews already. #203 could not cite
+          # boost::optional::operator! by file:line and said so; a later run
+          # burned two of its five refused calls on plain `ls -d
+          # /usr/include/boost/asio/ip/`, which has no chain, no pipe and no
+          # substitution -- it was refused purely for being outside the tree.
+          #
+          # 183MB and ~10s, measured, against a ~14 minute median review.
+          # Boost only: it is the dependency whose SEMANTICS reviews keep
+          # needing (optional, asio, multiprecision), where the others are
+          # mostly C headers the review can reason about without reading.
+          if [ -d /usr/include/boost ]; then
+            mkdir -p deps-include
+            cp -r /usr/include/boost deps-include/boost 2>/dev/null || true
+            echo "deps: boost headers at deps-include/boost ($(du -sh deps-include/boost 2>/dev/null | cut -f1))"
+          fi
+
           {
             echo "Optional analysis tools available in this checkout."
             echo
@@ -495,6 +517,13 @@ jobs:
                 printf -- '- %s: NOT AVAILABLE\n' "$t"
               fi
             done
+            echo
+            echo
+            if [ -d deps-include/boost ]; then
+              echo "System headers readable from inside the tree:"
+              echo "- deps-include/boost/  (Boost, copied from /usr/include)"
+              echo "  /usr/include is OUTSIDE the sandbox and cannot be read."
+            fi
             echo
             echo "Deliberately absent, measured on this tree:"
             echo "- cppcheck: dies on epee/Boost macros, even with include paths."

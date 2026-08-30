@@ -166,10 +166,16 @@ memory each time.
 
 Two more turn-wasters worth knowing before you hit them:
 
-- **Stay inside the checkout.** `find /` and friends are refused by the sandbox
-  even though `find` is allowlisted — that is the filesystem boundary, not the
-  allowlist, and nothing you add to a command gets past it. Use
-  `git ls-files | grep <name>` to locate anything you cannot place.
+- **Stay inside the checkout.** `/usr/include` and anything else outside the
+  working tree is refused even though `ls` and `find` are allowlisted — that is
+  the filesystem boundary, not the allowlist, and no rephrasing gets past it.
+  **Boost is the exception**: it is copied to `deps-include/boost/`, so a claim
+  that turns on `boost::optional` semantics is now settleable by `file:line`
+  instead of left UNRESOLVED, which is exactly what happened in an earlier
+  review. Untracked, so use `ls`/`find`, not `git ls-files`.
+- **Do not append `; echo "rc=$?"`.** It is refused, and the tool result
+  already reports success, failure and stderr. Three of five refusals in one
+  recent run were this shape on commands that would otherwise have worked.
 - **`external/rapidjson`, `external/randomx`, `external/supercop` and
   `external/gtest` are submodules whose source IS fetched**, at the PR head's
   pinned commits — but `git ls-files` and `git grep` cannot see inside them,

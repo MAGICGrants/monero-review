@@ -188,6 +188,17 @@ cp -r "$HERE/.claude" "$CACHE/.claude"
     fi
   done
   echo
+  if [ -d /usr/include/boost ] && [ ! -d "$CACHE/deps-include/boost" ]; then
+    mkdir -p "$CACHE/deps-include"
+    cp -r /usr/include/boost "$CACHE/deps-include/boost" 2>/dev/null || true
+  fi
+  if [ -d "$CACHE/deps-include/boost" ]; then
+    echo
+    echo "System headers readable from inside the tree:"
+    echo "- deps-include/boost/  (Boost, copied from /usr/include)"
+    echo "  /usr/include is OUTSIDE the sandbox and cannot be read."
+    echo
+  fi
   echo "Deliberately absent, measured on this tree:"
   echo "- cppcheck: dies on epee/Boost macros, even with include paths."
   echo "- flawfinder: finds nothing here; it targets legacy C."

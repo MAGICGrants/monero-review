@@ -132,12 +132,23 @@ nothing here because it targets legacy C functions this codebase does not use.
 **Pipes work.** `git diff origin/base...HEAD | wc -l`, `sed -n '100,200p' f.cpp
 | grep -n free`, `cscope -d -L3 fn | head -40` are all fine — use them freely.
 
-**Search the checkout, not the filesystem.** `find /`, `find /usr`, and anything
-else reaching outside the working tree is refused by the sandbox even though
-`find` itself is allowed — the allowlist and the filesystem boundary are two
-different gates, and no allowlist entry gets you past the second. It costs a
-turn every time. `git ls-files | grep <name>` locates any tracked file in the
-tree and, unlike `find`, cannot wander off it.
+**Search the checkout, not the filesystem.** `/usr/include`, `/usr/lib`, `/`
+and anything else outside the working tree is refused by the sandbox even
+though `ls` and `find` are allowlisted — the allowlist and the filesystem
+boundary are two different gates, and no allowlist entry gets you past the
+second. `ls -d /usr/include/boost/asio/ip/` is refused despite having no pipe,
+no chain and no substitution. Do not retry it in a different shape; the shape
+is not the problem.
+
+**Boost headers are available inside the tree**, at `deps-include/boost/`,
+copied there precisely because reviews kept needing them and could not read
+`/usr/include`. So `boost::optional`'s `operator!`, asio's resolver types, and
+the rest are citable by `file:line` like any other source. They are untracked,
+so `git ls-files` will not list them — use `ls` or `find deps-include/boost`.
+`TOOLING.md` says whether the copy is present.
+
+`git ls-files | grep <name>` locates any tracked file in the tree and, unlike
+`find`, cannot wander off it.
 
 **Vendored dependencies are readable, but `git ls-files` cannot see them.**
 `external/rapidjson`, `external/randomx`, `external/supercop` and
@@ -183,7 +194,15 @@ for nothing:
 | --- | --- |
 | `cmd > file` — any redirect to a file | **use the `Write` tool** — it is allowed and writes any file you want; for shell output, pipe it: `cmd \| wc -l` |
 | `cmd1 && cmd2`, `cmd1; cmd2` | two separate calls |
+| `cmd; echo "rc=$?"` | just run `cmd` — see below |
 | `$(...)` command substitution | resolve it in a separate call, paste the value in |
+
+**Stop appending `; echo "rc=$?"`.** It is the single most common thing that
+gets refused here — three of five refusals in one recent run were exactly this
+shape, on commands that would otherwise have run fine. It is also pointless:
+the tool result already tells you whether a command succeeded and shows you
+stderr. Adding the echo converts a working command into a refused one and
+tells you nothing you were not already given.
 
 The redirect one matters most on a large diff: do not try to write per-file
 diffs out and measure them. `git diff --stat origin/base...HEAD` gives the
