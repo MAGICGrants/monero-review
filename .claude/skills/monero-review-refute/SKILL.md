@@ -169,6 +169,7 @@ Two more turn-wasters worth knowing before you hit them:
 - **Stay inside the checkout.** `/usr/include` and anything else outside the
   working tree is refused even though `ls` and `find` are allowlisted — that is
   the filesystem boundary, not the allowlist, and no rephrasing gets past it.
+  The substitution is mechanical: `/usr/include/boost/X` → `deps-include/boost/X`.
   **Boost is the exception**: it is copied to `deps-include/boost/`, so a claim
   that turns on `boost::optional` semantics is now settleable by `file:line`
   instead of left UNRESOLVED, which is exactly what happened in an earlier

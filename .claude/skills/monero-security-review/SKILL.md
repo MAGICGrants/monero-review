@@ -195,6 +195,7 @@ for nothing:
 | `cmd > file` — any redirect to a file | **use the `Write` tool** — it is allowed and writes any file you want; for shell output, pipe it: `cmd \| wc -l` |
 | `cmd1 && cmd2`, `cmd1; cmd2` | two separate calls |
 | `cmd; echo "rc=$?"` | just run `cmd` — see below |
+| any path outside the working tree | it is refused whatever the shape. For Boost specifically: `/usr/include/boost/X` → **`deps-include/boost/X`** |
 | `$(...)` command substitution | resolve it in a separate call, paste the value in |
 
 **Stop appending `; echo "rc=$?"`.** It is the single most common thing that
