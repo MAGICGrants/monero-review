@@ -8,10 +8,8 @@ A first-pass security review of this pull request has already been written to
 `review.md`. Your job is **not** to review the PR again. Your job is to try to
 destroy every finding in that file.
 
-Assume the first pass was overconfident, because first passes are. In prior
-audit work on this codebase, roughly four out of five candidate findings did not
-survive verification. Your default verdict is REFUTED; a finding has to earn
-CONFIRMED.
+Assume the first pass was overconfident, because first passes are. Your default
+verdict is REFUTED; a finding has to earn CONFIRMED.
 
 ## What you have
 
