@@ -111,6 +111,12 @@ jobs:
       issues: read
     outputs:
       prs: ${{ steps.pick.outputs.prs }}
+      # Queue depth as of this tick, for the published review's footer. Empty
+      # on the by-number and paused paths below, which return before the
+      # selector runs; the consumer omits the line rather than printing a zero
+      # it did not measure.
+      queue: ${{ steps.pick.outputs.queue }}
+      open: ${{ steps.pick.outputs.open }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -756,6 +762,27 @@ jobs:
           echo "state=$state" >> "$GITHUB_OUTPUT"
           echo "verification state: $state"
           printf '<sub>Verification: %s</sub>\n' "$note" >> review.md
+
+      # How much work was waiting when this PR was picked. Taken from the
+      # selector's own count rather than a fresh API call: the honest number
+      # is the queue as it stood at selection time, and an hour of upstream
+      # pushes later a recount would answer a different question. Third and
+      # last line of the footer block, appended after Verification so all
+      # three sit under one rule.
+      - name: Queue depth
+        if: always()
+        env:
+          QUEUED: ${{ needs.select.outputs.queue }}
+          OPEN: ${{ needs.select.outputs.open }}
+        run: |
+          set -euo pipefail
+          # Nothing to annotate, or a path that never ran the selector -- a
+          # dispatch by PR number and a paused sweep both return before it.
+          # Omit the line rather than print a zero nobody measured.
+          [ -s review.md ] || exit 0
+          [ -n "${QUEUED:-}" ] && [ -n "${OPEN:-}" ] || exit 0
+          printf '<sub>Queue: %s unreviewed of %s open upstream PR(s) when this run started.</sub>\n' \
+            "$QUEUED" "$OPEN" >> review.md
 
       # An issue is the dedup marker, so it is only written on success --
       # a rate-limited or timed-out run leaves no marker and gets retried.

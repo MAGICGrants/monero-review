@@ -194,6 +194,14 @@ def main():
     print(f"{len(queue)} unreviewed PR(s) {scope}, out of {len(prs)} open",
           file=sys.stderr)
 
+    # The same two numbers on stdout, which the workflow appends to
+    # $GITHUB_OUTPUT. The published review footer states the queue depth as of
+    # the moment the run started, and this is the only place that knows it:
+    # by the time the review job finishes, an hour of upstream pushes later,
+    # recomputing would give a different answer for a different question.
+    print(f"queue={len(queue)}")
+    print(f"open={len(prs)}")
+
     picked, probes = [], 0
     for pr in queue:
         if len(picked) >= batch or probes >= MAX_PROBES:
