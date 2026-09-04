@@ -366,6 +366,14 @@ Read these when the corresponding question comes up. They are in
 - **`references/refutations.md`** — the recurring reasons candidate findings in
   this codebase turn out to be unreachable. Read it before reporting anything.
 
+You may have access to an attached folder of audit resources. If you do not have access to this folder, ignore these. If you do have access to these resources, use them as appropriate to learn more context. You can use the `metadata.json` files to help search for relevant files more efficiently.
+- **`CLAUDE.md#repository-structure`** - a broad overview of the resources are organized.
+- **`registry`** - summaries of learned lessons, errors, and bug categories.
+- **`ai-audits`** - prior AI audits which should be assumed to have errors, but which could include leads. Not all of them are Monero related.
+- **`monero`** - the main folder of Monero related resources, including prior security audits, documentation, and vulnerability disclosures (`monero/disclosures`).
+- **`cryptography`** - research papers for the underlying cryptography used by Monero and other projects.
+
+
 ## Tools
 
 A symbol index may be present in the checkout. Prefer it over grep for
